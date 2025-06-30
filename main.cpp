@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <shellapi.h> // For CommandLineToArgvW
+#include <stdio.h>
 
 // The min/max macros conflict with like-named member functions.
 // Only use std::min and std::max defined in <algorithm>.
@@ -21,9 +22,15 @@
 #include <wrl.h>
 using namespace Microsoft::WRL;
 
-#include <stdio.h>
+// DirectX 12 specific and extension headers 
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#include <d3dcompiler.h>
+#include <DirectXMath.h>
+#include <d3dx12.h>
 
-void main()
+int main()
 {
 	printf("Hello World");
+	return 0;
 }
