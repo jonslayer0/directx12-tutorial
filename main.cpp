@@ -21,7 +21,9 @@
 #include <wrl.h>
 using namespace Microsoft::WRL;
 
+#include <stdio.h>
+
 void main()
 {
-
+	printf("Hello World");
 }
