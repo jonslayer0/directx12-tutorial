@@ -70,7 +70,7 @@ uint64_t	g_frameFenceValues[g_numFrames] = {};
 HANDLE		g_fenceEvent;
 
 // By default, enable V - Sync (V key)
-bool g_vsync = true;
+bool g_vSync = true;
 bool g_tearingSupported = false;
 
 // By default, use windowed mode (Alt+Enter or F11)
@@ -485,11 +485,258 @@ void Render()
             D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
         g_commandList->ResourceBarrier(1, &barrier);
+
+        FLOAT clearColor[] = { 0.4f, 0.6f, 0.9f, 1.0f };
+        CD3DX12_CPU_DESCRIPTOR_HANDLE rtv(g_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+            g_currentBackBufferIndex, g_rtvDescriptorSize);
+
+        g_commandList->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
+    }
+
+    // Present
+    {
+        CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(
+            backBuffer.Get(),
+            D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+        g_commandList->ResourceBarrier(1, &barrier);
+
+        ThrowIfFailed(g_commandList->Close());
+
+        ID3D12CommandList* const commandLists[] = {
+            g_commandList.Get()
+        };
+        g_commandQueue->ExecuteCommandLists(_countof(commandLists), commandLists);
+
+        UINT syncInterval = g_vSync ? 1 : 0;
+        UINT presentFlags = g_tearingSupported && !g_vSync ? DXGI_PRESENT_ALLOW_TEARING : 0;
+        ThrowIfFailed(g_swapChain->Present(syncInterval, presentFlags));
+
+        g_frameFenceValues[g_currentBackBufferIndex] = Signal(g_commandQueue, g_fence, g_fenceValue);
+
+        g_currentBackBufferIndex = g_swapChain->GetCurrentBackBufferIndex();
+
+        WaitForFenceValue(g_fence, g_frameFenceValues[g_currentBackBufferIndex], g_fenceEvent);
     }
 }
 
-int main()
+void Resize(uint32_t width, uint32_t height)
 {
-	printf("Hello World");
-	return 0;
+    if (g_clientWidth != width || g_clientHeight != height)
+    {
+        // Don't allow 0 size swap chain back buffers.
+        g_clientWidth = std::max(1u, width);
+        g_clientHeight = std::max(1u, height);
+
+        // Flush the GPU queue to make sure the swap chain's back buffers
+        // are not being referenced by an in-flight command list.
+        Flush(g_commandQueue, g_fence, g_fenceValue, g_fenceEvent);
+
+        for (int i = 0; i < g_numFrames; ++i)
+        {
+            // Any references to the back buffers must be released
+            // before the swap chain can be resized.
+            g_backBuffers[i].Reset();
+            g_frameFenceValues[i] = g_frameFenceValues[g_currentBackBufferIndex];
+        }
+
+        DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
+        ThrowIfFailed(g_swapChain->GetDesc(&swapChainDesc));
+        ThrowIfFailed(g_swapChain->ResizeBuffers(g_numFrames, g_clientWidth, g_clientHeight,
+            swapChainDesc.BufferDesc.Format, swapChainDesc.Flags));
+
+        g_currentBackBufferIndex = g_swapChain->GetCurrentBackBufferIndex();
+
+        UpdateRenderTargetViews(g_device, g_swapChain, g_rtvDescriptorHeap);
+    }
+}
+
+void SetFullscreen(bool fullscreen)
+{
+    if (g_fullscreen != fullscreen)
+    {
+        g_fullscreen = fullscreen;
+
+        if (g_fullscreen) // Switching to fullscreen.
+        {
+            // Store the current window dimensions so they can be restored 
+            // when switching out of fullscreen state.
+            ::GetWindowRect(g_hWnd, &g_windowRect);
+
+            // Set the window style to a borderless window so the client area fills
+            // the entire screen.
+            UINT windowStyle = WS_OVERLAPPEDWINDOW & ~(WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+            ::SetWindowLongW(g_hWnd, GWL_STYLE, windowStyle);
+
+            // Query the name of the nearest display device for the window.
+            // This is required to set the fullscreen dimensions of the window
+            // when using a multi-monitor setup.
+            HMONITOR hMonitor = ::MonitorFromWindow(g_hWnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFOEX monitorInfo = {};
+            monitorInfo.cbSize = sizeof(MONITORINFOEX);
+            ::GetMonitorInfo(hMonitor, &monitorInfo);
+
+            ::SetWindowPos(g_hWnd, HWND_TOP,
+                monitorInfo.rcMonitor.left,
+                monitorInfo.rcMonitor.top,
+                monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left,
+                monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
+                SWP_FRAMECHANGED | SWP_NOACTIVATE);
+
+            ::ShowWindow(g_hWnd, SW_MAXIMIZE);
+        }
+        else
+        {
+            // Restore all the window decorators.
+            ::SetWindowLong(g_hWnd, GWL_STYLE, WS_OVERLAPPEDWINDOW);
+
+            ::SetWindowPos(g_hWnd, HWND_NOTOPMOST,
+                g_windowRect.left,
+                g_windowRect.top,
+                g_windowRect.right - g_windowRect.left,
+                g_windowRect.bottom - g_windowRect.top,
+                SWP_FRAMECHANGED | SWP_NOACTIVATE);
+
+            ::ShowWindow(g_hWnd, SW_NORMAL);
+        }
+    }
+}
+
+LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    if (g_isInitialized)
+    {
+        switch (message)
+        {
+            case WM_PAINT:
+                Update();
+                Render();
+                break;
+            case WM_SYSKEYDOWN:
+            case WM_KEYDOWN:
+            {
+                bool alt = (::GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+
+                switch (wParam)
+                {
+                case 'V':
+                    g_vSync = !g_vSync;
+                    break;
+                case VK_ESCAPE:
+                    ::PostQuitMessage(0);
+                    break;
+                case VK_RETURN:
+                    if (alt)
+                    {
+                case VK_F11:
+                    SetFullscreen(!g_fullscreen);
+                    }
+                    break;
+                }
+            }
+            break;
+            // The default window procedure will play a system notification sound 
+            // when pressing the Alt+Enter keyboard combination if this message is 
+            // not handled.
+            case WM_SYSCHAR:
+                break;
+            case WM_SIZE:
+            {
+                RECT clientRect = {};
+                ::GetClientRect(g_hWnd, &clientRect);
+
+                int width = clientRect.right - clientRect.left;
+                int height = clientRect.bottom - clientRect.top;
+
+                Resize(width, height);
+            }
+            break;
+            case WM_DESTROY:
+                ::PostQuitMessage(0);
+                break;
+            default:
+                return ::DefWindowProcW(hwnd, message, wParam, lParam);
+        }
+    }
+    else
+    {
+        return ::DefWindowProcW(hwnd, message, wParam, lParam);
+    }
+
+    return 0;
+}
+
+//int main()
+//{
+//	printf("Hello World");
+//	return 0;
+//}
+
+int main(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine, int nCmdShow)
+{
+    // Windows 10 Creators update adds Per Monitor V2 DPI awareness context.
+    // Using this awareness context allows the client area of the window 
+    // to achieve 100% scaling while still allowing non-client window content to 
+    // be rendered in a DPI sensitive fashion.
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+    // Window class name. Used for registering / creating the window.
+    const wchar_t* windowClassName = L"DX12WindowClass";
+    ParseCommandLineArguments();
+
+    EnableDebugLayer();
+
+    g_tearingSupported = CheckTearingSupport();
+
+    RegisterWindowClass(hInstance, windowClassName);
+    g_hWnd = CreateWindow(windowClassName, hInstance, L"Learning DirectX 12",
+        g_clientWidth, g_clientHeight);
+
+    // Initialize the global window rect variable.
+    ::GetWindowRect(g_hWnd, &g_windowRect);
+
+    ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(g_useWarp);
+
+    g_device = CreateDevice(dxgiAdapter4);
+
+    g_commandQueue = CreateCommandQueue(g_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+
+    g_swapChain = CreateSwapChain(g_hWnd, g_commandQueue, g_clientWidth, g_clientHeight, g_numFrames);
+
+    g_currentBackBufferIndex = g_swapChain->GetCurrentBackBufferIndex();
+
+    g_rtvDescriptorHeap = CreateDescriptorHeap(g_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, g_numFrames);
+    g_rtvDescriptorSize = g_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+    UpdateRenderTargetViews(g_device, g_swapChain, g_rtvDescriptorHeap);
+
+    for (int i = 0; i < g_numFrames; ++i)
+    {
+        g_commandAllocators[i] = CreateCommandAllocator(g_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+    }
+    g_commandList = CreateCommandList(g_device, g_commandAllocators[g_currentBackBufferIndex], D3D12_COMMAND_LIST_TYPE_DIRECT);
+
+    g_fence = CreateFence(g_device);
+    g_fenceEvent = CreateEventHandle();
+
+    //
+    g_isInitialized = true;
+
+    ::ShowWindow(g_hWnd, SW_SHOW);
+
+    MSG msg = {};
+    while (msg.message != WM_QUIT)
+    {
+        if (::PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+        {
+            ::TranslateMessage(&msg);
+            ::DispatchMessage(&msg);
+        }
+    }
+
+    // Make sure the command queue has finished all commands before closing.
+    Flush(g_commandQueue, g_fence, g_fenceValue, g_fenceEvent);
+
+    ::CloseHandle(g_fenceEvent);
+
+    return 0;
 }
