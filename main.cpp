@@ -121,7 +121,7 @@ void EnableDebugLayer()
 void RegisterWindowClass(HINSTANCE hInst, const wchar_t* windowClassName)
 {
     // Register a window class for creating our render window with.
-    WNDCLASSEXW windowClass = {};
+    WNDCLASSEXW windowClass = {0};
     windowClass.cbSize = sizeof(WNDCLASSEX);
     windowClass.style = CS_HREDRAW | CS_VREDRAW;
     windowClass.lpfnWndProc = &WndProc;
@@ -135,7 +135,8 @@ void RegisterWindowClass(HINSTANCE hInst, const wchar_t* windowClassName)
     windowClass.lpszClassName = windowClassName;
     windowClass.hIconSm = ::LoadIcon(hInst, NULL);
 
-    assert(::RegisterClassExW(&windowClass) > 0);
+    static ATOM atom = ::RegisterClassExW(&windowClass);
+    assert(atom > 0);
 }
 
 HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst,
@@ -665,7 +666,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     return 0;
 }
 
-int main(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine, int nCmdShow)
+int CALLBACK main(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine, int nCmdShow)
 {
     // Windows 10 Creators update adds Per Monitor V2 DPI awareness context.
     // Using this awareness context allows the client area of the window 
@@ -682,24 +683,20 @@ int main(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine, int nCmd
     g_tearingSupported = CheckTearingSupport();
 
     RegisterWindowClass(hInstance, windowClassName);
-    g_hWnd = CreateWindow(windowClassName, hInstance, L"Learning DirectX 12",
-        g_clientWidth, g_clientHeight);
+    g_hWnd = CreateWindow(windowClassName, hInstance, L"Learning DirectX 12", g_clientWidth, g_clientHeight);
 
     // Initialize the global window rect variable.
     ::GetWindowRect(g_hWnd, &g_windowRect);
 
     ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(g_useWarp);
 
-    g_device = CreateDevice(dxgiAdapter4);
-
-    g_commandQueue = CreateCommandQueue(g_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
-
-    g_swapChain = CreateSwapChain(g_hWnd, g_commandQueue, g_clientWidth, g_clientHeight, g_numFrames);
-
-    g_currentBackBufferIndex = g_swapChain->GetCurrentBackBufferIndex();
-
-    g_rtvDescriptorHeap = CreateDescriptorHeap(g_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, g_numFrames);
-    g_rtvDescriptorSize = g_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    // Create DX12 objects
+    g_device                    = CreateDevice(dxgiAdapter4);
+    g_commandQueue              = CreateCommandQueue(g_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+    g_swapChain                 = CreateSwapChain(g_hWnd, g_commandQueue, g_clientWidth, g_clientHeight, g_numFrames);
+    g_currentBackBufferIndex    = g_swapChain->GetCurrentBackBufferIndex();
+    g_rtvDescriptorHeap         = CreateDescriptorHeap(g_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, g_numFrames);
+    g_rtvDescriptorSize         = g_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
     UpdateRenderTargetViews(g_device, g_swapChain, g_rtvDescriptorHeap);
 
@@ -712,7 +709,7 @@ int main(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine, int nCmd
     g_fence = CreateFence(g_device);
     g_fenceEvent = CreateEventHandle();
 
-    //
+    // Everything is initialized
     g_isInitialized = true;
 
     ::ShowWindow(g_hWnd, SW_SHOW);
