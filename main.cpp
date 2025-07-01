@@ -665,12 +665,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     return 0;
 }
 
-//int main()
-//{
-//	printf("Hello World");
-//	return 0;
-//}
-
 int main(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine, int nCmdShow)
 {
     // Windows 10 Creators update adds Per Monitor V2 DPI awareness context.
