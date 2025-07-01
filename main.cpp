@@ -128,12 +128,12 @@ void RegisterWindowClass(HINSTANCE hInst, const wchar_t* windowClassName)
     windowClass.cbClsExtra = 0;
     windowClass.cbWndExtra = 0;
     windowClass.hInstance = hInst;
-    windowClass.hIcon = ::LoadIcon(hInst, NULL);
-    windowClass.hCursor = ::LoadCursor(NULL, IDC_ARROW);
+    windowClass.hIcon = ::LoadIcon(hInst, 0);
+    windowClass.hCursor = ::LoadCursor(nullptr, IDC_ARROW);
     windowClass.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    windowClass.lpszMenuName = NULL;
+    windowClass.lpszMenuName = nullptr;
     windowClass.lpszClassName = windowClassName;
-    windowClass.hIconSm = ::LoadIcon(hInst, NULL);
+    windowClass.hIconSm = ::LoadIcon(hInst, nullptr);
 
     static ATOM atom = ::RegisterClassExW(&windowClass);
     assert(atom > 0);
@@ -156,7 +156,7 @@ HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst,
     int windowY = std::max<int>(0, (screenHeight - windowHeight) / 2);
 
     HWND hWnd = ::CreateWindowExW(
-        NULL,
+        0,
         windowClassName,
         windowTitle,
         WS_OVERLAPPEDWINDOW,
@@ -164,8 +164,8 @@ HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst,
         windowY,
         windowWidth,
         windowHeight,
-        NULL,
-        NULL,
+        nullptr,
+        nullptr,
         hInst,
         nullptr
     );
@@ -414,7 +414,7 @@ ComPtr<ID3D12Fence> CreateFence(ComPtr<ID3D12Device2> device)
 HANDLE CreateEventHandle()
 {
     HANDLE fenceEvent;
-    fenceEvent = ::CreateEvent(NULL, FALSE, FALSE, NULL);
+    fenceEvent = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
     assert(fenceEvent && "Failed to create fence event.");
 
     return fenceEvent;
@@ -717,7 +717,7 @@ int CALLBACK main(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine,
     MSG msg = {};
     while (msg.message != WM_QUIT)
     {
-        if (::PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+        if (::PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
         {
             ::TranslateMessage(&msg);
             ::DispatchMessage(&msg);
