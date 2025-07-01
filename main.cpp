@@ -18,10 +18,6 @@
 #undef CreateWindow
 #endif
 
-// Windows Runtime Library. Needed for Microsoft::WRL::ComPtr<> template class.
-#include <wrl.h>
-using namespace Microsoft::WRL;
-
 // DirectX 12 specific and extension headers 
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -36,9 +32,6 @@ using namespace Microsoft::WRL;
 
 // Helper functions
 #include <Helpers.h>
-
-// The number of swap chain back buffers.
-const uint8_t g_numFrames = 3;
 
 // Use WARP adapter
 bool g_useWarp = false;
