@@ -181,9 +181,7 @@ HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst,
     return hWnd;
 }
 
-ComPtr<IDXGISwapChain4> CreateSwapChain(HWND hWnd,
-    ComPtr<ID3D12CommandQueue> commandQueue,
-    uint32_t width, uint32_t height, uint32_t bufferCount)
+void WINDOW::CreateSwapChain(ComPtr<ID3D12CommandQueue> commandQueue)
 {
     ComPtr<IDXGISwapChain4> dxgiSwapChain4;
     ComPtr<IDXGIFactory4> dxgiFactory4;
@@ -195,13 +193,13 @@ ComPtr<IDXGISwapChain4> CreateSwapChain(HWND hWnd,
     ThrowIfFailed(CreateDXGIFactory2(createFactoryFlags, IID_PPV_ARGS(&dxgiFactory4)));
 
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
-    swapChainDesc.Width = width;
-    swapChainDesc.Height = height;
+    swapChainDesc.Width = _clientWidth;
+    swapChainDesc.Height = _clientHeight;
     swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     swapChainDesc.Stereo = false;
     swapChainDesc.SampleDesc = { 1, 0 };
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    swapChainDesc.BufferCount = bufferCount;
+    swapChainDesc.BufferCount = g_numFrames;
     swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
@@ -212,7 +210,7 @@ ComPtr<IDXGISwapChain4> CreateSwapChain(HWND hWnd,
     ComPtr<IDXGISwapChain1> swapChain1;
     ThrowIfFailed(dxgiFactory4->CreateSwapChainForHwnd(
         commandQueue.Get(),
-        hWnd,
+        _hWnd,
         &swapChainDesc,
         nullptr,
         nullptr,
@@ -220,17 +218,17 @@ ComPtr<IDXGISwapChain4> CreateSwapChain(HWND hWnd,
 
     // Disable the Alt+Enter fullscreen toggle feature. Switching to fullscreen
     // will be handled manually.
-    ThrowIfFailed(dxgiFactory4->MakeWindowAssociation(hWnd, DXGI_MWA_NO_ALT_ENTER));
+    ThrowIfFailed(dxgiFactory4->MakeWindowAssociation(_hWnd, DXGI_MWA_NO_ALT_ENTER));
 
-    ThrowIfFailed(swapChain1.As(&dxgiSwapChain4));
+    // Set swap chain
+    ThrowIfFailed(swapChain1.As(&_swapChain));
 
-    return dxgiSwapChain4;
+    // Get first index of back buffer
+    _currentBackBufferIndex = _swapChain->GetCurrentBackBufferIndex();
 }
 
-void WINDOW::UpdateRenderTargetViews(ComPtr<ID3D12DescriptorHeap> descriptorHeap)
+void WINDOW::UpdateRenderTargetViews(ComPtr<ID3D12Device2> device, ComPtr<ID3D12DescriptorHeap> descriptorHeap)
 {
-    ComPtr<ID3D12Device2> device = APPLICATION::Instance()->GetDevice();
-
     auto rtvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
     CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(descriptorHeap->GetCPUDescriptorHandleForHeapStart());
@@ -270,8 +268,7 @@ WINDOW::WINDOW(HINSTANCE hInstance, ComPtr<ID3D12CommandQueue> commandQueue)
     // Initialize the global window rect variable.
     ::GetWindowRect(_hWnd, &_windowRect);
 
-    _swapChain = CreateSwapChain(_hWnd, commandQueue, _clientWidth, _clientHeight, g_numFrames);
-    _currentBackBufferIndex = _swapChain->GetCurrentBackBufferIndex();
+    // Swap chain creation called by application
 }
 
 void WINDOW::Resize()
@@ -307,7 +304,7 @@ void WINDOW::Resize()
 
         _currentBackBufferIndex = _swapChain->GetCurrentBackBufferIndex();
 
-        UpdateRenderTargetViews(APPLICATION::Instance()->GetDescriptorHeap());
+        UpdateRenderTargetViews(APPLICATION::Instance()->GetDevice(), APPLICATION::Instance()->GetDescriptorHeap());
     }
 }
 

@@ -8,17 +8,18 @@ public:
 	WINDOW(HINSTANCE hInstance, ComPtr<ID3D12CommandQueue> commandQueue);
 	~WINDOW() { ; }
 
+	void CreateSwapChain(ComPtr<ID3D12CommandQueue> commandQueue);
+
 	void ParseCommandLineArguments();
 
 	void Resize();
 	void SwitchFullscreen();
-	void UpdateRenderTargetViews(ComPtr<ID3D12DescriptorHeap> descriptorHeap);
+	void UpdateRenderTargetViews(ComPtr<ID3D12Device2> device, ComPtr<ID3D12DescriptorHeap> descriptorHeap);
 
 	inline void SetIsInitialized() { _isInitialized = true; }
 	inline void SwitchVSync() { _vSync = !_vSync; };
 	inline bool GetVSync() const { return _vSync; };
 	inline bool GetTearingSupported() const { return _tearingSupported; };
-
 	inline bool isInitialized() const { return _isInitialized; }
 
 	inline UINT& GetCurrentBackBufferIndex() { return _currentBackBufferIndex; }
@@ -50,5 +51,4 @@ private:
 
 	// Synchronization objects
 	uint64_t	_frameFenceValues[g_numFrames] = {};
-
 };

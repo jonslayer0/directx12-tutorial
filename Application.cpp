@@ -166,15 +166,17 @@ HANDLE CreateEventHandle()
 
 APPLICATION::APPLICATION(HINSTANCE hInstance)
 {
+    _windowInst = new WINDOW(hInstance, _commandQueue);
+
     ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(false); //_useWarp
 
     _device = CreateDevice(dxgiAdapter4);
     _commandQueue = CreateCommandQueue(_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+    _windowInst->CreateSwapChain(_commandQueue);
     _rtvDescriptorHeap = CreateDescriptorHeap(_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, g_numFrames);
     _rtvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
-    _windowInst = new WINDOW(hInstance, _commandQueue);
-    _windowInst->UpdateRenderTargetViews(_rtvDescriptorHeap);
+    _windowInst->UpdateRenderTargetViews(_device, _rtvDescriptorHeap);
 
     for (int i = 0; i < g_numFrames; ++i)
     {
