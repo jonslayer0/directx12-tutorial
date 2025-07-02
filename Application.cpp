@@ -188,12 +188,15 @@ APPLICATION::APPLICATION(HINSTANCE hInstance)
     _fenceEvent = CreateEventHandle();
 
     _windowInst->SetIsInitialized();
-
-    // TODO Message Loop
 }
 
 APPLICATION::~APPLICATION()
 {
+    // Make sure the command queue has finished all commands before closing.
+    Flush();
+
+    ::CloseHandle(_fenceEvent);
+
     delete _windowInst;
 }
 
@@ -205,7 +208,6 @@ APPLICATION* APPLICATION::CreateInstance(HINSTANCE hInstance)
 	}
 	return g_application; 
 }
-
 
 void APPLICATION::DeleteInstance()
 {
@@ -315,4 +317,24 @@ void APPLICATION::Flush()
 {
     uint64_t fenceValueForSignal = Signal(_commandQueue, _fence, _fenceValue);
     WaitForFenceValue(_fence, fenceValueForSignal, _fenceEvent);
+}
+
+void APPLICATION::Run()
+{
+    ::ShowWindow(_windowInst->GetWindowHandle(), SW_SHOW);
+
+    MSG msg = {};
+    while (msg.message != WM_QUIT)
+    {
+        if (::PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+        {
+            ::TranslateMessage(&msg);
+            ::DispatchMessage(&msg);
+        }
+    }
+}
+
+void APPLICATION::Quit()
+{
+    DeleteInstance();
 }

@@ -20,6 +20,9 @@ public:
 	void Render();
 	void Flush();
 
+	void Run();
+	void Quit();
+
 private:
 	APPLICATION(HINSTANCE hInstance);
 	~APPLICATION();

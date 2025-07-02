@@ -27,6 +27,8 @@ public:
 	inline ComPtr<IDXGISwapChain4> GetSwapChain() const { return _swapChain; }
 	inline uint64_t& GetCurrentFrameFenceValue() { return _frameFenceValues[_currentBackBufferIndex]; }
 
+	inline HWND GetWindowHandle() { return _hWnd; }
+
 private:
 	// Window handle.
 	HWND _hWnd;
