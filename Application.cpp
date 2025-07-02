@@ -1,4 +1,10 @@
 #include "Application.h"
+#include "Window.h"
+
+// STL Headers
+#include <algorithm>
+#include <cassert>
+#include <chrono>
 
 APPLICATION* APPLICATION::g_application = nullptr;
 
@@ -152,7 +158,7 @@ ComPtr<ID3D12Fence> CreateFence(ComPtr<ID3D12Device2> device)
 HANDLE CreateEventHandle()
 {
     HANDLE fenceEvent;
-    fenceEvent = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    fenceEvent = ::CreateEvent(nullptr, false, false, nullptr);
     assert(fenceEvent && "Failed to create fence event.");
 
     return fenceEvent;
@@ -167,16 +173,14 @@ APPLICATION::APPLICATION(HINSTANCE hInstance)
     _rtvDescriptorHeap = CreateDescriptorHeap(_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, g_numFrames);
     _rtvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
-    _windowInst = new WINDOW(hInstance);
-
+    _windowInst = new WINDOW(hInstance, _commandQueue);
     _windowInst->UpdateRenderTargetViews(_rtvDescriptorHeap);
 
     for (int i = 0; i < g_numFrames; ++i)
     {
         _commandAllocators[i] = CreateCommandAllocator(_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
     }
-    _commandList = CreateCommandList(_device, _commandAllocators[_windowInst->GetCurrentBackBufferIndex()], 
-        D3D12_COMMAND_LIST_TYPE_DIRECT);
+    _commandList = CreateCommandList(_device, _commandAllocators[_windowInst->GetCurrentBackBufferIndex()], D3D12_COMMAND_LIST_TYPE_DIRECT);
 
     _fence = CreateFence(_device);
     _fenceEvent = CreateEventHandle();
@@ -204,6 +208,7 @@ APPLICATION* APPLICATION::CreateInstance(HINSTANCE hInstance)
 void APPLICATION::DeleteInstance()
 {
 	delete g_application;
+    g_application = nullptr;
 }
 
 APPLICATION* APPLICATION::Instance() 
@@ -287,8 +292,7 @@ void APPLICATION::Render()
     }
 }
 
-uint64_t Signal(ComPtr<ID3D12CommandQueue> commandQueue, ComPtr<ID3D12Fence> fence,
-    uint64_t& fenceValue)
+uint64_t APPLICATION::Signal(ComPtr<ID3D12CommandQueue> commandQueue, ComPtr<ID3D12Fence> fence, uint64_t& fenceValue)
 {
     uint64_t fenceValueForSignal = ++fenceValue;
     ThrowIfFailed(commandQueue->Signal(fence.Get(), fenceValueForSignal));
@@ -296,8 +300,7 @@ uint64_t Signal(ComPtr<ID3D12CommandQueue> commandQueue, ComPtr<ID3D12Fence> fen
     return fenceValueForSignal;
 }
 
-void WaitForFenceValue(ComPtr<ID3D12Fence> fence, uint64_t fenceValue, HANDLE fenceEvent,
-    std::chrono::milliseconds duration = std::chrono::milliseconds::max())
+void APPLICATION::WaitForFenceValue(ComPtr<ID3D12Fence> fence, uint64_t fenceValue, HANDLE fenceEvent, std::chrono::milliseconds duration)
 {
     if (fence->GetCompletedValue() < fenceValue)
     {

@@ -1,17 +1,6 @@
 #include "Window.h"
 #include "Application.h"
 
-#include <shellapi.h> // For CommandLineToArgvW
-
-// The min/max macros conflict with like-named member functions.
-// Only use std::min and std::max defined in <algorithm>.
-#if defined(min)
-#undef min
-#endif
-#if defined(max)
-#undef max
-#endif
-
 void WINDOW::ParseCommandLineArguments()
 {
     int argc;
@@ -53,7 +42,7 @@ void EnableDebugLayer()
 
 bool CheckTearingSupport()
 {
-    BOOL allowTearing = FALSE;
+    BOOL allowTearing = false;
 
     // Rather than create the DXGI 1.5 factory interface directly, we create the
     // DXGI 1.4 interface and query for the 1.5 interface. This is to enable the 
@@ -68,7 +57,7 @@ bool CheckTearingSupport()
         {
             if (FAILED(factory5->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowTearing, sizeof(allowTearing))))
             {
-                allowTearing = FALSE;
+                allowTearing = false;
             }
         }
     }
@@ -164,7 +153,7 @@ HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst,
     int screenHeight = ::GetSystemMetrics(SM_CYSCREEN);
 
     RECT windowRect = { 0, 0, static_cast<LONG>(width), static_cast<LONG>(height) };
-    ::AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
+    ::AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, false);
 
     int windowWidth = windowRect.right - windowRect.left;
     int windowHeight = windowRect.bottom - windowRect.top;
@@ -209,7 +198,7 @@ ComPtr<IDXGISwapChain4> CreateSwapChain(HWND hWnd,
     swapChainDesc.Width = width;
     swapChainDesc.Height = height;
     swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    swapChainDesc.Stereo = FALSE;
+    swapChainDesc.Stereo = false;
     swapChainDesc.SampleDesc = { 1, 0 };
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     swapChainDesc.BufferCount = bufferCount;
@@ -218,7 +207,9 @@ ComPtr<IDXGISwapChain4> CreateSwapChain(HWND hWnd,
     swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
 
     // It is recommended to always allow tearing if tearing support is available.
-    swapChainDesc.Flags = CheckTearingSupport() ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0; ComPtr<IDXGISwapChain1> swapChain1;
+    swapChainDesc.Flags = CheckTearingSupport() ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0; 
+    
+    ComPtr<IDXGISwapChain1> swapChain1;
     ThrowIfFailed(dxgiFactory4->CreateSwapChainForHwnd(
         commandQueue.Get(),
         hWnd,
@@ -257,7 +248,7 @@ void WINDOW::UpdateRenderTargetViews(ComPtr<ID3D12DescriptorHeap> descriptorHeap
     }
 }
 
-WINDOW::WINDOW(HINSTANCE hInstance)
+WINDOW::WINDOW(HINSTANCE hInstance, ComPtr<ID3D12CommandQueue> commandQueue)
 {
     // Windows 10 Creators update adds Per Monitor V2 DPI awareness context.
     // Using this awareness context allows the client area of the window 
@@ -279,7 +270,7 @@ WINDOW::WINDOW(HINSTANCE hInstance)
     // Initialize the global window rect variable.
     ::GetWindowRect(_hWnd, &_windowRect);
 
-    _swapChain = CreateSwapChain(_hWnd, APPLICATION::Instance()->GetCommandQueue(), _clientWidth, _clientHeight, g_numFrames);
+    _swapChain = CreateSwapChain(_hWnd, commandQueue, _clientWidth, _clientHeight, g_numFrames);
     _currentBackBufferIndex = _swapChain->GetCurrentBackBufferIndex();
 }
 
@@ -316,7 +307,7 @@ void WINDOW::Resize()
 
         _currentBackBufferIndex = _swapChain->GetCurrentBackBufferIndex();
 
-        UpdateRenderTargetViews(g_rtvDescriptorHeap);
+        UpdateRenderTargetViews(APPLICATION::Instance()->GetDescriptorHeap());
     }
 }
 

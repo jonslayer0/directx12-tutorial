@@ -2,22 +2,10 @@
 
 #include "Helpers.h"
 
-// STL Headers
-#include <algorithm>
-#include <cassert>
-#include <chrono>
-
-// DirectX 12 specific and extension headers 
-#include <d3d12.h>
-#include <dxgi1_6.h>
-#include <d3dcompiler.h>
-#include <DirectXMath.h>
-#include <d3dx12.h>
-
 class WINDOW
 {
 public:
-	WINDOW(HINSTANCE hInstance);
+	WINDOW(HINSTANCE hInstance, ComPtr<ID3D12CommandQueue> commandQueue);
 	~WINDOW() { ; }
 
 	void ParseCommandLineArguments();

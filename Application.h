@@ -1,13 +1,8 @@
 #pragma once
 
-#include "Window.h"
+#include "Helpers.h"
 
-// DirectX 12 specific and extension headers 
-#include <d3d12.h>
-#include <dxgi1_6.h>
-#include <d3dcompiler.h>
-#include <DirectXMath.h>
-#include <d3dx12.h>
+class WINDOW;
 
 class APPLICATION
 {
@@ -16,18 +11,22 @@ public:
 	static void			DeleteInstance();
 	static APPLICATION* Instance();
 
-	inline WINDOW* GetWindow() const { return _windowInst; }
-	inline ComPtr<ID3D12CommandQueue> GetCommandQueue() const { return _commandQueue; }
-	inline ComPtr<ID3D12Device2> GetDevice() const { return _device; }
+	inline WINDOW* GetWindow() { return _windowInst; }
+	inline ComPtr<ID3D12CommandQueue> GetCommandQueue() { return _commandQueue; }
+	inline ComPtr<ID3D12Device2> GetDevice() { return _device; }
+	inline ComPtr<ID3D12DescriptorHeap> GetDescriptorHeap() { return _rtvDescriptorHeap; }
 
 	void Update();
 	void Render();
-
 	void Flush();
 
 private:
 	APPLICATION(HINSTANCE hInstance);
 	~APPLICATION();
+
+	uint64_t Signal(ComPtr<ID3D12CommandQueue> commandQueue, ComPtr<ID3D12Fence> fence, uint64_t& fenceValue);
+	void WaitForFenceValue(ComPtr<ID3D12Fence> fence, uint64_t fenceValue, HANDLE fenceEvent,
+		std::chrono::milliseconds duration = std::chrono::milliseconds::max());
 
 	// Application Instance
 	static APPLICATION* g_application;
