@@ -21,6 +21,7 @@ public:
 	inline bool GetVSync() const { return _vSync; };
 	inline bool GetTearingSupported() const { return _tearingSupported; };
 	inline bool isInitialized() const { return _isInitialized; }
+	inline bool GetIsWarp() const { return _useWarp; }
 
 	inline UINT& GetCurrentBackBufferIndex() { return _currentBackBufferIndex; }
 	inline ComPtr<ID3D12Resource> GetCurrentBackBuffer() const { return _backBuffers[_currentBackBufferIndex]; }

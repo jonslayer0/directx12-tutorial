@@ -20,9 +20,11 @@ HANDLE CreateEventHandle();
 
 APPLICATION::APPLICATION(HINSTANCE hInstance)
 {
+    // Create Window
     _windowInst = new WINDOW(hInstance, _commandQueue);
 
-    ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(false); //_useWarp
+    // Get GPU Adapter
+    ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(_windowInst->GetIsWarp());
 
     _device = CreateDevice(dxgiAdapter4);
     _commandQueue = CreateCommandQueue(_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -192,7 +194,6 @@ void APPLICATION::Quit()
 {
     DeleteInstance();
 }
-
 
 ComPtr<ID3D12Device2> CreateDevice(ComPtr<IDXGIAdapter4> adapter)
 {
