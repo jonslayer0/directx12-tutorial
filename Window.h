@@ -8,9 +8,9 @@ public:
 	WINDOW(HINSTANCE hInstance, ComPtr<ID3D12CommandQueue> commandQueue);
 	~WINDOW() { ; }
 
-	void CreateSwapChain(ComPtr<ID3D12CommandQueue> commandQueue);
-
 	void ParseCommandLineArguments();
+
+	void CreateSwapChain(ComPtr<ID3D12CommandQueue> commandQueue);
 
 	void Resize();
 	void SwitchFullscreen();

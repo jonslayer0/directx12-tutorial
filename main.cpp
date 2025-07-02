@@ -6,7 +6,6 @@
 int CALLBACK main(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine, int nCmdShow)
 {
     APPLICATION* application = APPLICATION::CreateInstance(hInstance);
-
     application->Run();
     application->Quit();
 

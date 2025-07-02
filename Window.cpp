@@ -1,6 +1,38 @@
 #include "Window.h"
 #include "Application.h"
 
+// Windows initiliazing function headers
+void EnableDebugLayer();
+bool CheckTearingSupport();
+LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+void RegisterWindowClass(HINSTANCE hInst, const wchar_t* windowClassName);
+HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst, const wchar_t* windowTitle, uint32_t width, uint32_t height);
+
+WINDOW::WINDOW(HINSTANCE hInstance, ComPtr<ID3D12CommandQueue> commandQueue)
+{
+    // Windows 10 Creators update adds Per Monitor V2 DPI awareness context.
+    // Using this awareness context allows the client area of the window 
+    // to achieve 100% scaling while still allowing non-client window content to 
+    // be rendered in a DPI sensitive fashion.
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+    // Window class name. Used for registering / creating the window.
+    const wchar_t* windowClassName = L"DX12WindowClass";
+    ParseCommandLineArguments();
+
+    EnableDebugLayer();
+
+    _tearingSupported = CheckTearingSupport();
+
+    RegisterWindowClass(hInstance, windowClassName);
+    _hWnd = CreateWindow(windowClassName, hInstance, L"Learning DirectX 12", _clientWidth, _clientHeight);
+
+    // Initialize the global window rect variable.
+    ::GetWindowRect(_hWnd, &_windowRect);
+
+    // Swap chain creation called by application
+}
+
 void WINDOW::ParseCommandLineArguments()
 {
     int argc;
@@ -26,6 +58,156 @@ void WINDOW::ParseCommandLineArguments()
 
     // Free memory allocated by CommandLineToArgvW
     ::LocalFree(argv);
+}
+
+void WINDOW::CreateSwapChain(ComPtr<ID3D12CommandQueue> commandQueue)
+{
+    ComPtr<IDXGISwapChain4> dxgiSwapChain4;
+    ComPtr<IDXGIFactory4> dxgiFactory4;
+    UINT createFactoryFlags = 0;
+#if defined(_DEBUG)
+    createFactoryFlags = DXGI_CREATE_FACTORY_DEBUG;
+#endif
+
+    ThrowIfFailed(CreateDXGIFactory2(createFactoryFlags, IID_PPV_ARGS(&dxgiFactory4)));
+
+    DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
+    swapChainDesc.Width = _clientWidth;
+    swapChainDesc.Height = _clientHeight;
+    swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    swapChainDesc.Stereo = false;
+    swapChainDesc.SampleDesc = { 1, 0 };
+    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swapChainDesc.BufferCount = g_numFrames;
+    swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
+    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+
+    // It is recommended to always allow tearing if tearing support is available.
+    swapChainDesc.Flags = CheckTearingSupport() ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+
+    ComPtr<IDXGISwapChain1> swapChain1;
+    ThrowIfFailed(dxgiFactory4->CreateSwapChainForHwnd(
+        commandQueue.Get(),
+        _hWnd,
+        &swapChainDesc,
+        nullptr,
+        nullptr,
+        &swapChain1));
+
+    // Disable the Alt+Enter fullscreen toggle feature. Switching to fullscreen
+    // will be handled manually.
+    ThrowIfFailed(dxgiFactory4->MakeWindowAssociation(_hWnd, DXGI_MWA_NO_ALT_ENTER));
+
+    // Set swap chain
+    ThrowIfFailed(swapChain1.As(&_swapChain));
+
+    // Get first index of back buffer
+    _currentBackBufferIndex = _swapChain->GetCurrentBackBufferIndex();
+}
+
+void WINDOW::Resize()
+{
+    RECT clientRect = {};
+    ::GetClientRect(_hWnd, &clientRect);
+
+    int width = clientRect.right - clientRect.left;
+    int height = clientRect.bottom - clientRect.top;
+
+    if (_clientWidth != width || _clientHeight != height)
+    {
+        // Don't allow 0 size swap chain back buffers.
+        _clientWidth = std::max(1, width);
+        _clientHeight = std::max(1, height);
+
+        // Flush the GPU queue to make sure the swap chain's back buffers
+        // are not being referenced by an in-flight command list.
+        APPLICATION::Instance()->Flush();
+
+        for (int i = 0; i < g_numFrames; ++i)
+        {
+            // Any references to the back buffers must be released
+            // before the swap chain can be resized.
+            _backBuffers[i].Reset();
+            _frameFenceValues[i] = _frameFenceValues[_currentBackBufferIndex];
+        }
+
+        DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
+        ThrowIfFailed(_swapChain->GetDesc(&swapChainDesc));
+        ThrowIfFailed(_swapChain->ResizeBuffers(g_numFrames, _clientWidth, _clientHeight,
+            swapChainDesc.BufferDesc.Format, swapChainDesc.Flags));
+
+        _currentBackBufferIndex = _swapChain->GetCurrentBackBufferIndex();
+
+        UpdateRenderTargetViews(APPLICATION::Instance()->GetDevice(), APPLICATION::Instance()->GetDescriptorHeap());
+    }
+}
+
+void WINDOW::SwitchFullscreen()
+{
+    _fullscreen = !_fullscreen;
+
+    if (_fullscreen) // Switching to fullscreen.
+    {
+        // Store the current window dimensions so they can be restored 
+        // when switching out of fullscreen state.
+        ::GetWindowRect(_hWnd, &_windowRect);
+
+        // Set the window style to a borderless window so the client area fills
+        // the entire screen.
+        UINT windowStyle = WS_OVERLAPPEDWINDOW & ~(WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+        ::SetWindowLongW(_hWnd, GWL_STYLE, windowStyle);
+
+        // Query the name of the nearest display device for the window.
+        // This is required to set the fullscreen dimensions of the window
+        // when using a multi-monitor setup.
+        HMONITOR hMonitor = ::MonitorFromWindow(_hWnd, MONITOR_DEFAULTTONEAREST);
+        MONITORINFOEX monitorInfo = {};
+        monitorInfo.cbSize = sizeof(MONITORINFOEX);
+        ::GetMonitorInfo(hMonitor, &monitorInfo);
+
+        ::SetWindowPos(_hWnd, HWND_TOP,
+            monitorInfo.rcMonitor.left,
+            monitorInfo.rcMonitor.top,
+            monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left,
+            monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
+            SWP_FRAMECHANGED | SWP_NOACTIVATE);
+
+        ::ShowWindow(_hWnd, SW_MAXIMIZE);
+    }
+    else
+    {
+        // Restore all the window decorators.
+        ::SetWindowLong(_hWnd, GWL_STYLE, WS_OVERLAPPEDWINDOW);
+
+        ::SetWindowPos(_hWnd, HWND_NOTOPMOST,
+            _windowRect.left,
+            _windowRect.top,
+            _windowRect.right - _windowRect.left,
+            _windowRect.bottom - _windowRect.top,
+            SWP_FRAMECHANGED | SWP_NOACTIVATE);
+
+        ::ShowWindow(_hWnd, SW_NORMAL);
+    }
+}
+
+void WINDOW::UpdateRenderTargetViews(ComPtr<ID3D12Device2> device, ComPtr<ID3D12DescriptorHeap> descriptorHeap)
+{
+    auto rtvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(descriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
+    for (int i = 0; i < g_numFrames; ++i)
+    {
+        ComPtr<ID3D12Resource> backBuffer;
+        ThrowIfFailed(_swapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer)));
+
+        device->CreateRenderTargetView(backBuffer.Get(), nullptr, rtvHandle);
+
+        _backBuffers[i] = backBuffer;
+
+        rtvHandle.Offset(rtvDescriptorSize);
+    }
 }
 
 void EnableDebugLayer()
@@ -179,179 +361,4 @@ HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst,
 
     assert(hWnd && "Failed to create window");
     return hWnd;
-}
-
-void WINDOW::CreateSwapChain(ComPtr<ID3D12CommandQueue> commandQueue)
-{
-    ComPtr<IDXGISwapChain4> dxgiSwapChain4;
-    ComPtr<IDXGIFactory4> dxgiFactory4;
-    UINT createFactoryFlags = 0;
-#if defined(_DEBUG)
-    createFactoryFlags = DXGI_CREATE_FACTORY_DEBUG;
-#endif
-
-    ThrowIfFailed(CreateDXGIFactory2(createFactoryFlags, IID_PPV_ARGS(&dxgiFactory4)));
-
-    DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
-    swapChainDesc.Width = _clientWidth;
-    swapChainDesc.Height = _clientHeight;
-    swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    swapChainDesc.Stereo = false;
-    swapChainDesc.SampleDesc = { 1, 0 };
-    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    swapChainDesc.BufferCount = g_numFrames;
-    swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
-    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-
-    // It is recommended to always allow tearing if tearing support is available.
-    swapChainDesc.Flags = CheckTearingSupport() ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0; 
-    
-    ComPtr<IDXGISwapChain1> swapChain1;
-    ThrowIfFailed(dxgiFactory4->CreateSwapChainForHwnd(
-        commandQueue.Get(),
-        _hWnd,
-        &swapChainDesc,
-        nullptr,
-        nullptr,
-        &swapChain1));
-
-    // Disable the Alt+Enter fullscreen toggle feature. Switching to fullscreen
-    // will be handled manually.
-    ThrowIfFailed(dxgiFactory4->MakeWindowAssociation(_hWnd, DXGI_MWA_NO_ALT_ENTER));
-
-    // Set swap chain
-    ThrowIfFailed(swapChain1.As(&_swapChain));
-
-    // Get first index of back buffer
-    _currentBackBufferIndex = _swapChain->GetCurrentBackBufferIndex();
-}
-
-void WINDOW::UpdateRenderTargetViews(ComPtr<ID3D12Device2> device, ComPtr<ID3D12DescriptorHeap> descriptorHeap)
-{
-    auto rtvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(descriptorHeap->GetCPUDescriptorHandleForHeapStart());
-
-    for (int i = 0; i < g_numFrames; ++i)
-    {
-        ComPtr<ID3D12Resource> backBuffer;
-        ThrowIfFailed(_swapChain->GetBuffer(i, IID_PPV_ARGS(&backBuffer)));
-
-        device->CreateRenderTargetView(backBuffer.Get(), nullptr, rtvHandle);
-
-        _backBuffers[i] = backBuffer;
-
-        rtvHandle.Offset(rtvDescriptorSize);
-    }
-}
-
-WINDOW::WINDOW(HINSTANCE hInstance, ComPtr<ID3D12CommandQueue> commandQueue)
-{
-    // Windows 10 Creators update adds Per Monitor V2 DPI awareness context.
-    // Using this awareness context allows the client area of the window 
-    // to achieve 100% scaling while still allowing non-client window content to 
-    // be rendered in a DPI sensitive fashion.
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
-    // Window class name. Used for registering / creating the window.
-    const wchar_t* windowClassName = L"DX12WindowClass";
-    ParseCommandLineArguments();
-
-    EnableDebugLayer();
-
-    _tearingSupported = CheckTearingSupport();
-
-    RegisterWindowClass(hInstance, windowClassName);
-    _hWnd = CreateWindow(windowClassName, hInstance, L"Learning DirectX 12", _clientWidth, _clientHeight);
-
-    // Initialize the global window rect variable.
-    ::GetWindowRect(_hWnd, &_windowRect);
-
-    // Swap chain creation called by application
-}
-
-void WINDOW::Resize()
-{
-    RECT clientRect = {};
-    ::GetClientRect(_hWnd, &clientRect);
-
-    int width = clientRect.right - clientRect.left;
-    int height = clientRect.bottom - clientRect.top;
-
-    if (_clientWidth != width || _clientHeight != height)
-    {
-        // Don't allow 0 size swap chain back buffers.
-        _clientWidth = std::max(1, width);
-        _clientHeight = std::max(1, height);
-
-        // Flush the GPU queue to make sure the swap chain's back buffers
-        // are not being referenced by an in-flight command list.
-        APPLICATION::Instance()->Flush();
-
-        for (int i = 0; i < g_numFrames; ++i)
-        {
-            // Any references to the back buffers must be released
-            // before the swap chain can be resized.
-            _backBuffers[i].Reset();
-            _frameFenceValues[i] = _frameFenceValues[_currentBackBufferIndex];
-        }
-
-        DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
-        ThrowIfFailed(_swapChain->GetDesc(&swapChainDesc));
-        ThrowIfFailed(_swapChain->ResizeBuffers(g_numFrames, _clientWidth, _clientHeight,
-            swapChainDesc.BufferDesc.Format, swapChainDesc.Flags));
-
-        _currentBackBufferIndex = _swapChain->GetCurrentBackBufferIndex();
-
-        UpdateRenderTargetViews(APPLICATION::Instance()->GetDevice(), APPLICATION::Instance()->GetDescriptorHeap());
-    }
-}
-
-void WINDOW::SwitchFullscreen()
-{
-    _fullscreen = !_fullscreen;
-
-    if (_fullscreen) // Switching to fullscreen.
-    {
-        // Store the current window dimensions so they can be restored 
-        // when switching out of fullscreen state.
-        ::GetWindowRect(_hWnd, &_windowRect);
-
-        // Set the window style to a borderless window so the client area fills
-        // the entire screen.
-        UINT windowStyle = WS_OVERLAPPEDWINDOW & ~(WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
-        ::SetWindowLongW(_hWnd, GWL_STYLE, windowStyle);
-
-        // Query the name of the nearest display device for the window.
-        // This is required to set the fullscreen dimensions of the window
-        // when using a multi-monitor setup.
-        HMONITOR hMonitor = ::MonitorFromWindow(_hWnd, MONITOR_DEFAULTTONEAREST);
-        MONITORINFOEX monitorInfo = {};
-        monitorInfo.cbSize = sizeof(MONITORINFOEX);
-        ::GetMonitorInfo(hMonitor, &monitorInfo);
-
-        ::SetWindowPos(_hWnd, HWND_TOP,
-            monitorInfo.rcMonitor.left,
-            monitorInfo.rcMonitor.top,
-            monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left,
-            monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
-            SWP_FRAMECHANGED | SWP_NOACTIVATE);
-
-        ::ShowWindow(_hWnd, SW_MAXIMIZE);
-    }
-    else
-    {
-        // Restore all the window decorators.
-        ::SetWindowLong(_hWnd, GWL_STYLE, WS_OVERLAPPEDWINDOW);
-
-        ::SetWindowPos(_hWnd, HWND_NOTOPMOST,
-            _windowRect.left,
-            _windowRect.top,
-            _windowRect.right - _windowRect.left,
-            _windowRect.bottom - _windowRect.top,
-            SWP_FRAMECHANGED | SWP_NOACTIVATE);
-
-        ::ShowWindow(_hWnd, SW_NORMAL);
-    }
 }
