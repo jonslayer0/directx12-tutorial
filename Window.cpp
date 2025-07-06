@@ -281,6 +281,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
                 window->SwitchFullscreen();
                 }
                 break;
+            case VK_F4:
+                if (alt) ::PostQuitMessage(0);
+                break;
             }
         }
         break;

@@ -13,11 +13,11 @@ public:
 
 	ComPtr<ID3D12GraphicsCommandList2> GetCommadList();
 	
-	uint64_t ExecuteCommandList(ComPtr<ID3D12GraphicsCommandList2>);
+	uint64_t ExecuteCommandList(ComPtr<ID3D12GraphicsCommandList2> commandList);
 	
 	uint64_t Signal();
-	bool IsFenceComplete(uint64_t fence);
-	void WaitForFenceValue(uint64_t fence);
+	bool IsFenceComplete(uint64_t fenceValue);
+	void WaitForFenceValue(uint64_t fenceValue, std::chrono::milliseconds duration = std::chrono::milliseconds::max());
 	void Flush();
 
 	ComPtr<ID3D12CommandQueue> GetCommandQueue() const;
