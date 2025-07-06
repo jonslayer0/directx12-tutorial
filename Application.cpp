@@ -11,13 +11,11 @@ APPLICATION* APPLICATION::g_application = nullptr;
 
 // DirectX12 initiliazing function headers
 ComPtr<ID3D12Device2> CreateDevice(ComPtr<IDXGIAdapter4> adapter);
-ComPtr<ID3D12CommandQueue> CreateCommandQueue(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE type);
 ComPtr<IDXGIAdapter4> GetAdapter(bool useWarp);
 ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t numDescriptors);
-ComPtr<ID3D12CommandAllocator> CreateCommandAllocator(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE type);
-ComPtr<ID3D12GraphicsCommandList> CreateCommandList(ComPtr<ID3D12Device2> device, ComPtr<ID3D12CommandAllocator> commandAllocator, D3D12_COMMAND_LIST_TYPE type);
-ComPtr<ID3D12Fence> CreateFence(ComPtr<ID3D12Device2> device);
-HANDLE CreateEventHandle();
+
+
+
 
 APPLICATION::APPLICATION(HINSTANCE hInstance)
 {
@@ -206,21 +204,6 @@ ComPtr<ID3D12Device2> CreateDevice(ComPtr<IDXGIAdapter4> adapter)
     return d3d12Device2;
 }
 
-ComPtr<ID3D12CommandQueue> CreateCommandQueue(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE type)
-{
-    ComPtr<ID3D12CommandQueue> d3d12CommandQueue;
-
-    D3D12_COMMAND_QUEUE_DESC desc = {};
-    desc.Type = type;
-    desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-    desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-    desc.NodeMask = 0;
-
-    ThrowIfFailed(device->CreateCommandQueue(&desc, IID_PPV_ARGS(&d3d12CommandQueue)));
-
-    return d3d12CommandQueue;
-}
-
 ComPtr<IDXGIAdapter4> GetAdapter(bool useWarp)
 {
     ComPtr<IDXGIFactory4> dxgiFactory;
@@ -276,39 +259,4 @@ ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, 
     ThrowIfFailed(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&descriptorHeap)));
 
     return descriptorHeap;
-}
-
-ComPtr<ID3D12CommandAllocator> CreateCommandAllocator(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE type)
-{
-    ComPtr<ID3D12CommandAllocator> commandAllocator;
-    ThrowIfFailed(device->CreateCommandAllocator(type, IID_PPV_ARGS(&commandAllocator)));
-
-    return commandAllocator;
-}
-
-ComPtr<ID3D12GraphicsCommandList> CreateCommandList(ComPtr<ID3D12Device2> device, ComPtr<ID3D12CommandAllocator> commandAllocator, D3D12_COMMAND_LIST_TYPE type)
-{
-    ComPtr<ID3D12GraphicsCommandList> commandList;
-    ThrowIfFailed(device->CreateCommandList(0, type, commandAllocator.Get(), nullptr, IID_PPV_ARGS(&commandList)));
-
-    ThrowIfFailed(commandList->Close());
-
-    return commandList;
-}
-
-ComPtr<ID3D12Fence> CreateFence(ComPtr<ID3D12Device2> device)
-{
-    ComPtr<ID3D12Fence> fence;
-    ThrowIfFailed(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
-
-    return fence;
-}
-
-HANDLE CreateEventHandle()
-{
-    HANDLE fenceEvent;
-    fenceEvent = ::CreateEvent(nullptr, false, false, nullptr);
-    assert(fenceEvent && "Failed to create fence event.");
-
-    return fenceEvent;
 }
