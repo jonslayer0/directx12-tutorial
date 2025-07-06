@@ -1,5 +1,6 @@
 #include "Window.h"
 #include "Application.h"
+#include "CommandQueue.h"
 
 // Windows initiliazing function headers
 void EnableDebugLayer();
@@ -8,7 +9,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 void RegisterWindowClass(HINSTANCE hInst, const wchar_t* windowClassName);
 HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst, const wchar_t* windowTitle, uint32_t width, uint32_t height);
 
-WINDOW::WINDOW(HINSTANCE hInstance, ComPtr<ID3D12CommandQueue> commandQueue)
+WINDOW::WINDOW(HINSTANCE hInstance)
 {
     // Windows 10 Creators update adds Per Monitor V2 DPI awareness context.
     // Using this awareness context allows the client area of the window 

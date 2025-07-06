@@ -35,10 +35,10 @@ ComPtr<ID3D12GraphicsCommandList2> COMMAND_QUEUE::CreateCommandList(ComPtr<ID3D1
 
 COMMAND_QUEUE::~COMMAND_QUEUE()
 {
-
+	Flush();
 }
 
-ComPtr<ID3D12GraphicsCommandList2> COMMAND_QUEUE::GetCommadList()
+ComPtr<ID3D12GraphicsCommandList2> COMMAND_QUEUE::GetCommandList()
 {
 	ComPtr<ID3D12CommandAllocator> commandAllocator;
 	ComPtr<ID3D12GraphicsCommandList2> commandList;
@@ -78,7 +78,7 @@ uint64_t COMMAND_QUEUE::ExecuteCommandList(ComPtr<ID3D12GraphicsCommandList2> co
 
 	ID3D12CommandAllocator* commandAllocator = nullptr; // Temp, must be released after push to decrement ref count or leak
 	UINT dataSize = sizeof(commandAllocator);
-	ThrowIfFailed(commandList->GetPrivateData(__uuidof(ID3D12CommandAllocator), &dataSize, commandAllocator));
+	ThrowIfFailed(commandList->GetPrivateData(__uuidof(ID3D12CommandAllocator), &dataSize, &commandAllocator));
 
 	ID3D12CommandList* const aCommandList[] =
 	{

@@ -2,10 +2,12 @@
 
 #include "Helpers.h"
 
+class COMMAND_QUEUE;
+
 class WINDOW
 {
 public:
-	WINDOW(HINSTANCE hInstance, ComPtr<ID3D12CommandQueue> commandQueue);
+	WINDOW(HINSTANCE hInstance);
 	~WINDOW() { ; }
 
 	void ParseCommandLineArguments();

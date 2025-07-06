@@ -11,7 +11,7 @@ public:
 	COMMAND_QUEUE(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE type);
 	virtual ~COMMAND_QUEUE();
 
-	ComPtr<ID3D12GraphicsCommandList2> GetCommadList();
+	ComPtr<ID3D12GraphicsCommandList2> GetCommandList();
 	
 	uint64_t ExecuteCommandList(ComPtr<ID3D12GraphicsCommandList2> commandList);
 	

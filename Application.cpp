@@ -1,5 +1,6 @@
 #include "Application.h"
 #include "Window.h"
+#include "CommandQueue.h"
 
 // STL Headers
 #include <algorithm>
@@ -21,38 +22,28 @@ HANDLE CreateEventHandle();
 APPLICATION::APPLICATION(HINSTANCE hInstance)
 {
     // Create Window
-    _windowInst = new WINDOW(hInstance, _commandQueue);
+    _windowInst = new WINDOW(hInstance);
 
     // Get GPU Adapter
     ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(_windowInst->GetIsWarp());
 
     _device = CreateDevice(dxgiAdapter4);
-    _commandQueue = CreateCommandQueue(_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
-    _windowInst->CreateSwapChain(_commandQueue);
+    
+    _commandQueue = new COMMAND_QUEUE(_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+    
+    _windowInst->CreateSwapChain(_commandQueue->GetCommandQueue());
+    
     _rtvDescriptorHeap = CreateDescriptorHeap(_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, g_numFrames);
     _rtvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
     _windowInst->UpdateRenderTargetViews(_device, _rtvDescriptorHeap);
-
-    for (int i = 0; i < g_numFrames; ++i)
-    {
-        _commandAllocators[i] = CreateCommandAllocator(_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
-    }
-    _commandList = CreateCommandList(_device, _commandAllocators[_windowInst->GetCurrentBackBufferIndex()], D3D12_COMMAND_LIST_TYPE_DIRECT);
-
-    _fence = CreateFence(_device);
-    _fenceEvent = CreateEventHandle();
 
     _windowInst->SetIsInitialized();
 }
 
 APPLICATION::~APPLICATION()
 {
-    // Make sure the command queue has finished all commands before closing.
-    Flush();
-
-    ::CloseHandle(_fenceEvent);
-
+    delete _commandQueue;
     delete _windowInst;
 }
 
@@ -106,10 +97,7 @@ void APPLICATION::Render()
     UINT& currentBackBufferIndex = _windowInst->GetCurrentBackBufferIndex();
     auto backBuffer = _windowInst->GetCurrentBackBuffer();
 
-    auto commandAllocator = _commandAllocators[currentBackBufferIndex];
-
-    commandAllocator->Reset();
-    _commandList->Reset(commandAllocator.Get(), nullptr);
+    ComPtr<ID3D12GraphicsCommandList2> commandList = _commandQueue->GetCommandList();
 
     // Clear the render target.
     {
@@ -117,13 +105,13 @@ void APPLICATION::Render()
             backBuffer.Get(),
             D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-        _commandList->ResourceBarrier(1, &barrier);
+        commandList.Get()->ResourceBarrier(1, &barrier);
 
         FLOAT clearColor[] = { 0.4f, 0.6f, 0.9f, 1.0f };
         CD3DX12_CPU_DESCRIPTOR_HANDLE rtv(_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
             currentBackBufferIndex, _rtvDescriptorSize);
 
-        _commandList->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
+        commandList.Get()->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
     }
 
     // Present
@@ -131,48 +119,25 @@ void APPLICATION::Render()
         CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(
             backBuffer.Get(),
             D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
-        _commandList->ResourceBarrier(1, &barrier);
+        commandList.Get()->ResourceBarrier(1, &barrier);
 
-        ThrowIfFailed(_commandList->Close());
-
-        ID3D12CommandList* const commandLists[] = {
-            _commandList.Get()
-        };
-        _commandQueue->ExecuteCommandLists(_countof(commandLists), commandLists);
+        _commandQueue->ExecuteCommandList(commandList);
 
         UINT syncInterval = _windowInst->GetVSync() ? 1 : 0;
         UINT presentFlags = _windowInst->GetTearingSupported() && !_windowInst->GetVSync() ? DXGI_PRESENT_ALLOW_TEARING : 0;
         ThrowIfFailed(_windowInst->GetSwapChain()->Present(syncInterval, presentFlags));
 
-        _windowInst->GetCurrentFrameFenceValue() = Signal(_commandQueue, _fence, _fenceValue);
+        _windowInst->GetCurrentFrameFenceValue() = _commandQueue->Signal();
 
         currentBackBufferIndex = _windowInst->GetSwapChain()->GetCurrentBackBufferIndex();
 
-        WaitForFenceValue(_fence, _windowInst->GetCurrentFrameFenceValue(), _fenceEvent);
-    }
-}
-
-uint64_t APPLICATION::Signal(ComPtr<ID3D12CommandQueue> commandQueue, ComPtr<ID3D12Fence> fence, uint64_t& fenceValue)
-{
-    uint64_t fenceValueForSignal = ++fenceValue;
-    ThrowIfFailed(commandQueue->Signal(fence.Get(), fenceValueForSignal));
-
-    return fenceValueForSignal;
-}
-
-void APPLICATION::WaitForFenceValue(ComPtr<ID3D12Fence> fence, uint64_t fenceValue, HANDLE fenceEvent, std::chrono::milliseconds duration)
-{
-    if (fence->GetCompletedValue() < fenceValue)
-    {
-        ThrowIfFailed(fence->SetEventOnCompletion(fenceValue, fenceEvent));
-        ::WaitForSingleObject(fenceEvent, static_cast<DWORD>(duration.count()));
+        _commandQueue->WaitForFenceValue(_windowInst->GetCurrentFrameFenceValue());
     }
 }
 
 void APPLICATION::Flush()
 {
-    uint64_t fenceValueForSignal = Signal(_commandQueue, _fence, _fenceValue);
-    WaitForFenceValue(_fence, fenceValueForSignal, _fenceEvent);
+    _commandQueue->Flush(); // TODO : remove application Flush
 }
 
 void APPLICATION::Run()
