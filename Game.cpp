@@ -1,76 +1,32 @@
 #include "Game.h"
+#include "Application.h"
 
-GAME::GAME(string name, int width, int height, bool vSync)
+GAME::GAME(const wstring& name, int width, int height, bool vSync):
+	_name(name),
+	_width(width),
+	_height(height),
+	_vSync(vSync)
 {
 
 }
 
 GAME::~GAME() 
 {
-
+	Destroy();
 }
 
-bool GAME::Intitialize()
+bool GAME::Initialize()
 {
+	if (DirectX::XMVerifyCPUSupport() == false)
+	{
+		MessageBoxA(nullptr, "Failed to verify DirectX Math library support.", "Error", MB_OK | MB_ICONERROR);
+		return false;
+	}
 
-}
-
-bool GAME::LoadContent()
-{
-
-}
-
-void GAME::UnloadContent()
-{
-
+	_window = APPLICATION::Instance()->GetWindow();
 }
 
 void GAME::Destroy()
-{
-
-}
-
-void GAME::OnUpdate()
-{
-
-}
-
-void GAME::OnRender()
-{
-
-}
-
-void GAME::OnKeyPressed()
-{
-
-}
-
-void GAME::OnKeyReleased()
-{
-
-}
-
-void GAME::OnMouseMoved()
-{
-
-}
-
-void GAME::OnMouseButtonPressed()
-{
-
-}
-
-void GAME::OnMouseWheel()
-{
-
-}
-
-void GAME::OnResize()
-{
-
-}
-
-void GAME::OnWindowDestroy()
 {
 
 }
