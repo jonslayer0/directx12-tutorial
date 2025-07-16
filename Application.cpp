@@ -14,9 +14,6 @@ ComPtr<ID3D12Device2> CreateDevice(ComPtr<IDXGIAdapter4> adapter);
 ComPtr<IDXGIAdapter4> GetAdapter(bool useWarp);
 ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t numDescriptors);
 
-
-
-
 APPLICATION::APPLICATION(HINSTANCE hInstance)
 {
     // Create Window
