@@ -24,16 +24,16 @@ public:
 	virtual void UnloadContent() = 0;
 	virtual void Destroy();
 
-private :
-	virtual void OnUpdate(UpdateEventArgs& e) = 0;;
-	virtual void OnRender(RenderEventArgs& e) = 0;;
-	virtual void OnKeyPressed(KeyEventArgs& e) = 0;;
-	virtual void OnKeyReleased(KeyEventArgs& e) = 0;;
-	virtual void OnMouseMoved(MouseMotionEventArgs& e) = 0;;
-	virtual void OnMouseButtonPressed(MouseButtonEventArgs& e) = 0;;
-	virtual void OnMouseWheel(MouseWheelEventArgs& e) = 0;;
-	virtual void OnResize(ResizeEventArgs& e) = 0;;
-	virtual void OnWindowDestroy() = 0;;
+protected :
+	virtual void OnUpdate(UpdateEventArgs& e);
+	virtual void OnRender(RenderEventArgs& e);
+	virtual void OnKeyPressed(KeyEventArgs& e);
+	virtual void OnKeyReleased(KeyEventArgs& e);
+	virtual void OnMouseMoved(MouseMotionEventArgs& e);
+	virtual void OnMouseButtonPressed(MouseButtonEventArgs& e);
+	virtual void OnMouseWheel(MouseWheelEventArgs& e);
+	virtual void OnResize(ResizeEventArgs& e);
+	virtual void OnWindowDestroy();
 
 	WINDOW* _window = nullptr;
 	wstring _name;

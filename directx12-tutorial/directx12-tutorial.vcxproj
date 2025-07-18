@@ -133,6 +133,7 @@
     <ClCompile Include="..\CommandQueue.cpp" />
     <ClCompile Include="..\Game.cpp" />
     <ClCompile Include="..\main.cpp" />
+    <ClCompile Include="..\Tutorial\Tutorial.cpp" />
     <ClCompile Include="..\Window.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -140,6 +141,7 @@
     <ClInclude Include="..\CommandQueue.h" />
     <ClInclude Include="..\Game.h" />
     <ClInclude Include="..\Helpers.h" />
+    <ClInclude Include="..\Tutorial\Tutorial.h" />
     <ClInclude Include="..\Window.h" />
   </ItemGroup>
   <ItemGroup>
