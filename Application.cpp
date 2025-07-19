@@ -257,3 +257,8 @@ ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, 
 
     return descriptorHeap;
 }
+
+COMMAND_QUEUE* APPLICATION::GetCommandQueue(D3D12_COMMAND_LIST_TYPE commandListType)
+{
+    return new COMMAND_QUEUE(_device, commandListType); // todo track ?
+}
