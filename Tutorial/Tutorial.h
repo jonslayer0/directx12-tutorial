@@ -44,7 +44,7 @@ private:
 		const void* pBufferData,
 		D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE);
 
-	void ResizeDepthBuffer(int width, int height) { ; }
+	void ResizeDepthBuffer(int width, int height);
 
 	uint64_t _FenceValues[g_numFrames] = {0};
 

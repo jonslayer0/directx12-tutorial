@@ -2,6 +2,8 @@
 
 #include "Helpers.h"
 
+#include <vector>
+
 class WINDOW;
 class COMMAND_QUEUE;
 
@@ -34,7 +36,8 @@ private:
 
 	// 
 	WINDOW*			_windowInst = nullptr;
-	COMMAND_QUEUE*	_commandQueue = nullptr;
+	COMMAND_QUEUE*	_commandQueue = nullptr; // TODO : fuse
+	vector<COMMAND_QUEUE*> _commandQueues;	 //
 
 	// DirectX12 objects
 	ComPtr<ID3D12Device2>		 _device;

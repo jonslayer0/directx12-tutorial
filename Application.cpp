@@ -77,7 +77,7 @@ void APPLICATION::Update()
     elapsedSeconds += deltaTime.count() * 1e-9;
     if (elapsedSeconds > 1.0)
     {
-        wchar_t buffer[500];
+        wchar_t buffer[500] = {};
         auto fps = frameCounter / elapsedSeconds;
         swprintf_s(&buffer[0], 500, L"FPS: %f\n", fps);
         OutputDebugString(buffer);
@@ -132,7 +132,11 @@ void APPLICATION::Render()
 
 void APPLICATION::Flush()
 {
-    _commandQueue->Flush(); // TODO : remove application Flush
+    _commandQueue->Flush();
+    for (COMMAND_QUEUE* queue : _commandQueues)
+    {
+        queue->Flush();
+    }
 }
 
 void APPLICATION::Run()
@@ -260,5 +264,6 @@ ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, 
 
 COMMAND_QUEUE* APPLICATION::GetCommandQueue(D3D12_COMMAND_LIST_TYPE commandListType)
 {
-    return new COMMAND_QUEUE(_device, commandListType); // todo track ?
+    _commandQueues.push_back(new COMMAND_QUEUE(_device, commandListType));
+    return (*_commandQueues.end());
 }

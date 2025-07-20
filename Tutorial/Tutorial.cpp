@@ -12,7 +12,7 @@ struct VERTEX_POS_COLOR
     XMFLOAT3 Color;
 };
 
-struct PIPELINE_STREAM_STRUCTURE
+struct PIPELINE_STREAM_STATE
 {
     CD3DX12_PIPELINE_STATE_STREAM_ROOT_SIGNATURE rootSignature;
     CD3DX12_PIPELINE_STATE_STREAM_INPUT_LAYOUT inputLayout;
@@ -169,10 +169,10 @@ bool TUTORIAL::LoadContent()
         D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
         D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
 
-    CD3DX12_ROOT_PARAMETER1 rootParameters[1];
+    CD3DX12_ROOT_PARAMETER1 rootParameters[1] = {};
     rootParameters[0].InitAsConstants(sizeof(XMMATRIX) / 4, 0, 0, D3D12_SHADER_VISIBILITY_VERTEX); // number of 32 bits elements ==> '16' floats (size of MMATRIX / 4)
 
-    CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDescription;
+    CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDescription = {};
     CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC::Init_1_2(rootSignatureDescription, _countof(rootParameters), rootParameters, 0, nullptr, rootSignatureFlags);
 
     ComPtr<ID3DBlob> rootSignatureBlob;
@@ -180,10 +180,133 @@ bool TUTORIAL::LoadContent()
     ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSignatureDescription, featureData.HighestVersion, &rootSignatureBlob, &errorBlob));
     ThrowIfFailed(device->CreateRootSignature(0, rootSignatureBlob->GetBufferPointer(), rootSignatureBlob->GetBufferSize(), IID_PPV_ARGS(&_rootSignature)));
 
+    // Pipeline State Object
+    D3D12_RT_FORMAT_ARRAY rtFormatArrays = {};
+    rtFormatArrays.NumRenderTargets = 1;
+    rtFormatArrays.RTFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+    PIPELINE_STREAM_STATE pipelineStateStream = {};
+    pipelineStateStream.rootSignature = _rootSignature.Get();
+    pipelineStateStream.inputLayout = { inputLayout, _countof(inputLayout) };
+    pipelineStateStream.primtiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    pipelineStateStream.vertexShader = CD3DX12_SHADER_BYTECODE(vertexShaderBlob.Get());
+    pipelineStateStream.pixelShader = CD3DX12_SHADER_BYTECODE(pixelShaderBlob.Get());
+    pipelineStateStream.dsvFormat = DXGI_FORMAT_D32_FLOAT;
+    pipelineStateStream.renderTargetFormats = rtFormatArrays;
+
+    D3D12_PIPELINE_STATE_STREAM_DESC psoDesc = {};
+    psoDesc.pPipelineStateSubobjectStream = &pipelineStateStream;
+    psoDesc.SizeInBytes = sizeof(PIPELINE_STREAM_STATE);
+    ThrowIfFailed(device->CreatePipelineState(&psoDesc, IID_PPV_ARGS(&_pipelineState)));
+
+    uint64_t fenceValue = commandQueue->ExecuteCommandList(commandList);
+    commandQueue->WaitForFenceValue(fenceValue);
+
+    _contentLoaded = true;
+
+    ResizeDepthBuffer(GetClientWidth(), GetClientHeight());
+
     return true;
 }
 
 void TUTORIAL::UnloadContent()
 {
 
+}
+
+void TUTORIAL::ResizeDepthBuffer(int width, int height)
+{
+    if (_contentLoaded)
+    {
+        APPLICATION::Instance()->Flush();
+
+        width = std::max(1, width);
+        height = std::max(1, height);
+
+        ComPtr<ID3D12Device2> device = APPLICATION::Instance()->GetDevice();
+
+        D3D12_CLEAR_VALUE optimizedClearValue = {};
+        optimizedClearValue.Format = DXGI_FORMAT_D32_FLOAT;
+        optimizedClearValue.DepthStencil = { 1.0f, 0 };
+
+        ThrowIfFailed(device->CreateCommittedResource(
+            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+            D3D12_HEAP_FLAG_NONE,
+            &CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT, width, height, 1, 0, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL),
+            D3D12_RESOURCE_STATE_DEPTH_WRITE,
+            &optimizedClearValue,
+            IID_PPV_ARGS(&_depthBuffer))
+        );
+
+        D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+        dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
+        dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+        dsvDesc.Texture2D.MipSlice = 0;
+        dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+
+        device->CreateDepthStencilView(_depthBuffer.Get(), &dsvDesc, _dsvHeap->GetCPUDescriptorHandleForHeapStart());
+    }
+}
+
+void TUTORIAL::OnUpdate(UpdateEventArgs& e)
+{
+    static uint64_t frameCount = 0;
+    static double totalTime = 0.0;
+    
+    super::OnUpdate(e);
+
+    totalTime = e.elapseTime;
+    frameCount++;
+
+    // Display FPS after every second
+    if (totalTime > 1.0)
+    {
+        double fps = frameCount / totalTime;
+
+        char buffer[512] = {};
+        sprintf_s(buffer, "FPS : %f\n", fps);
+        OutputDebugStringA(buffer);
+
+        frameCount = 0;
+        totalTime = 0.0;
+    }
+
+    float angle = static_cast<float>(e.totalTime * 90.0);
+    const XMVECTOR rotationAxis = XMVectorSet(0, 1, 1, 0);
+    _modelMatrix = XMMatrixRotationAxis(rotationAxis, XMConvertToRadians(angle));
+
+    const XMVECTOR eyePosition = XMVectorSet(0,0,-10,1);
+    const XMVECTOR focusPoint = XMVectorSet(0,0,0,1);
+    const XMVECTOR upDirection = XMVectorSet(0,1,0,0);
+    _viewMatrix = XMMatrixLookAtLH(eyePosition, focusPoint, upDirection);
+
+    float aspectRatio = GetClientWidth() / static_cast<float>(GetClientHeight());
+    _projectionMatrix = XMMatrixPerspectiveFovLH(XMConvertToRadians(_fov), aspectRatio, 0.1f, 100.0f);
+}
+
+void TUTORIAL::OnRender(RenderEventArgs& e)
+{
+
+}
+
+void TUTORIAL::OnKeyPressed(KeyEventArgs& e)
+{
+
+}
+
+void TUTORIAL::OnMouseWheel(MouseWheelEventArgs& e)
+{
+
+}
+
+void TUTORIAL::OnResize(ResizeEventArgs& e)
+{
+    if (e.width != GetClientWidth() || e.height != GetClientHeight())
+    {
+        super::OnResize(e);
+
+        _viewport = CD3DX12_VIEWPORT(0.0f, 0.0f, static_cast<float>(e.width), static_cast<float>(e.height));
+
+        ResizeDepthBuffer(e.width, e.height);
+    }
 }
