@@ -30,5 +30,6 @@ bool GAME::Initialize()
 
 void GAME::Destroy()
 {
-
+	APPLICATION::Instance()->DestroyWindow();
+	_window = nullptr;
 }

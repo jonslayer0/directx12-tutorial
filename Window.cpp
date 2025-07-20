@@ -9,7 +9,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 void RegisterWindowClass(HINSTANCE hInst, const wchar_t* windowClassName);
 HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst, const wchar_t* windowTitle, uint32_t width, uint32_t height);
 
-WINDOW::WINDOW(HINSTANCE hInstance)
+WINDOW::WINDOW(const wstring& name, int width, int height, bool vSync):
+    _clientWidth(width),
+    _clientHeight(height),
+    _vSync(vSync)
 {
     // Windows 10 Creators update adds Per Monitor V2 DPI awareness context.
     // Using this awareness context allows the client area of the window 
@@ -17,48 +20,18 @@ WINDOW::WINDOW(HINSTANCE hInstance)
     // be rendered in a DPI sensitive fashion.
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-    // Window class name. Used for registering / creating the window.
-    const wchar_t* windowClassName = L"DX12WindowClass";
-    ParseCommandLineArguments();
-
     EnableDebugLayer();
 
     _tearingSupported = CheckTearingSupport();
 
-    RegisterWindowClass(hInstance, windowClassName);
-    _hWnd = CreateWindow(windowClassName, hInstance, L"Learning DirectX 12", _clientWidth, _clientHeight);
+    HINSTANCE hInstance = NULL;
+    RegisterWindowClass(hInstance, name.data());
+    _hWnd = CreateWindow(name.data(), hInstance, L"Learning DirectX 12", _clientWidth, _clientHeight);
 
     // Initialize the global window rect variable.
     ::GetWindowRect(_hWnd, &_windowRect);
 
     // Swap chain creation called by application
-}
-
-void WINDOW::ParseCommandLineArguments()
-{
-    int argc;
-    wchar_t** argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
-
-    for (size_t i = 0; i < argc; ++i)
-    {
-        if (::wcscmp(argv[i], L"-w") == 0 || ::wcscmp(argv[i], L"--width") == 0)
-        {
-            _clientWidth = ::wcstol(argv[++i], nullptr, 10);
-        }
-
-        if (::wcscmp(argv[i], L"-h") == 0 || ::wcscmp(argv[i], L"--height") == 0)
-        {
-            _clientHeight = ::wcstol(argv[++i], nullptr, 10);
-        }
-
-        if (::wcscmp(argv[i], L"-warp") == 0 || ::wcscmp(argv[i], L"--warp") == 0)
-        {
-            _useWarp = true;
-        }
-    }
-
-    // Free memory allocated by CommandLineToArgvW
-    ::LocalFree(argv);
 }
 
 void WINDOW::CreateSwapChain(ComPtr<ID3D12CommandQueue> commandQueue)
@@ -211,6 +184,15 @@ void WINDOW::UpdateRenderTargetViews(ComPtr<ID3D12Device2> device, ComPtr<ID3D12
     }
 }
 
+UINT WINDOW::Present()
+{
+    UINT syncInterval = _vSync ? 1 : 0;
+    UINT presentFlags = _tearingSupported && !_vSync ? DXGI_PRESENT_ALLOW_TEARING : 0;
+    ThrowIfFailed(_swapChain->Present(syncInterval, presentFlags));
+
+    return _swapChain->GetCurrentBackBufferIndex();
+}
+
 D3D12_CPU_DESCRIPTOR_HANDLE WINDOW::GetCurrentRenderTargetView(UINT rtvDescriptorSize, ComPtr<ID3D12DescriptorHeap> descriptorHeap)
 {
    return CD3DX12_CPU_DESCRIPTOR_HANDLE(descriptorHeap->GetCPUDescriptorHandleForHeapStart(), _currentBackBufferIndex, rtvDescriptorSize);
@@ -257,7 +239,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     APPLICATION* application = APPLICATION::Instance();
 
-    if (application && application->GetWindow()->isInitialized())
+    if (application && application->GetWindow() && application->GetWindow()->isInitialized())
     {
         WINDOW* window = application->GetWindow();
 

@@ -11,9 +11,13 @@ class COMMAND_QUEUE;
 class APPLICATION
 {
 public:
-	static APPLICATION* CreateInstance(HINSTANCE hInstance);
+	static APPLICATION* CreateInstance();
 	static void			DeleteInstance();
 	static APPLICATION* Instance();
+
+	void CreateRenderWindow(const wstring& name, int width, int height, bool vSync);
+	void ParseCommandLineArguments();
+	void DestroyWindow();
 
 	inline WINDOW* GetWindow() { return _windowInst; }
 	inline COMMAND_QUEUE* GetCommandQueue() { return _commandQueue; }
@@ -29,8 +33,9 @@ public:
 	void Run();
 	void Quit();
 
+
 private:
-	APPLICATION(HINSTANCE hInstance);
+	APPLICATION();
 	~APPLICATION();
 
 	// Application Instance
@@ -45,4 +50,11 @@ private:
 	ComPtr<ID3D12Device2>		 _device;
 	ComPtr<ID3D12DescriptorHeap> _rtvDescriptorHeap;
 	UINT						 _rtvDescriptorSize = 0u;
+
+	//
+	wstring _Name;
+	int _width = 1;
+	int _height = 1;
+	bool _vSync = false;
+	bool _useWarp = false;
 };

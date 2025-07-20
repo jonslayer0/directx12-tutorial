@@ -2,21 +2,23 @@
 
 #include "Helpers.h"
 
+#include <string.h>
+using namespace std;
+
 class COMMAND_QUEUE;
 
 class WINDOW
 {
 public:
-	WINDOW(HINSTANCE hInstance);
+	WINDOW(const wstring& name, int width, int height, bool vSync);
 	~WINDOW() { ; }
-
-	void ParseCommandLineArguments();
 
 	void CreateSwapChain(ComPtr<ID3D12CommandQueue> commandQueue);
 
 	void Resize();
 	void SwitchFullscreen();
 	void UpdateRenderTargetViews(ComPtr<ID3D12Device2> device, ComPtr<ID3D12DescriptorHeap> descriptorHeap);
+	UINT Present();
 
 	inline void SetIsInitialized() { _isInitialized = true; }
 	inline void SwitchVSync() { _vSync = !_vSync; };

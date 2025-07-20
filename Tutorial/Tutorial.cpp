@@ -323,6 +323,13 @@ void TUTORIAL::OnRender(RenderEventArgs& e)
     commandList->SetGraphicsRoot32BitConstants(0, sizeof(XMMATRIX) / 4, &mvpMatrix, 0);
 
     commandList->DrawIndexedInstanced(_countof(g_Indices), 1, 0, 0, 0);
+
+    {
+        TransitionResource(commandList, backBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+        _fenceValues[currentBackBufferIndex] = commandQueue->ExecuteCommandList(commandList);
+        currentBackBufferIndex = _window->Present();
+        commandQueue->WaitForFenceValue(_fenceValues[currentBackBufferIndex]);
+    }
 }
 
 void TUTORIAL::OnKeyPressed(KeyEventArgs& e)

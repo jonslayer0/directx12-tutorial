@@ -14,26 +14,8 @@ ComPtr<ID3D12Device2> CreateDevice(ComPtr<IDXGIAdapter4> adapter);
 ComPtr<IDXGIAdapter4> GetAdapter(bool useWarp);
 ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t numDescriptors);
 
-APPLICATION::APPLICATION(HINSTANCE hInstance)
+APPLICATION::APPLICATION()
 {
-    // Create Window
-    _windowInst = new WINDOW(hInstance);
-
-    // Get GPU Adapter
-    ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(_windowInst->GetIsWarp());
-
-    _device = CreateDevice(dxgiAdapter4);
-    
-    _commandQueue = new COMMAND_QUEUE(_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
-    
-    _windowInst->CreateSwapChain(_commandQueue->GetCommandQueue());
-    
-    _rtvDescriptorHeap = CreateDescriptorHeap(_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, g_numFrames);
-    _rtvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-    _windowInst->UpdateRenderTargetViews(_device, _rtvDescriptorHeap);
-
-    _windowInst->SetIsInitialized();
 }
 
 APPLICATION::~APPLICATION()
@@ -42,11 +24,11 @@ APPLICATION::~APPLICATION()
     delete _windowInst;
 }
 
-APPLICATION* APPLICATION::CreateInstance(HINSTANCE hInstance) 
+APPLICATION* APPLICATION::CreateInstance() 
 { 
 	if (g_application == nullptr) 
 	{
-		g_application = new APPLICATION(hInstance);
+		g_application = new APPLICATION();
 	}
 	return g_application; 
 }
@@ -60,6 +42,62 @@ void APPLICATION::DeleteInstance()
 APPLICATION* APPLICATION::Instance() 
 { 
 	return  g_application; 
+}
+
+
+void APPLICATION::CreateRenderWindow(const wstring& name, int width, int height, bool vSync)
+{
+    // Create Window
+    _windowInst = new WINDOW(name, width, height, vSync);
+
+    // Get GPU Adapter
+    ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(_windowInst->GetIsWarp());
+
+    _device = CreateDevice(dxgiAdapter4);
+
+    _commandQueue = new COMMAND_QUEUE(_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+
+    _windowInst->CreateSwapChain(_commandQueue->GetCommandQueue());
+
+    _rtvDescriptorHeap = CreateDescriptorHeap(_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, g_numFrames);
+    _rtvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+    _windowInst->UpdateRenderTargetViews(_device, _rtvDescriptorHeap);
+
+    _windowInst->SetIsInitialized();
+}
+
+void APPLICATION::ParseCommandLineArguments()
+{
+    int argc;
+    wchar_t** argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
+
+    for (size_t i = 0; i < argc; ++i)
+    {
+        if (::wcscmp(argv[i], L"-w") == 0 || ::wcscmp(argv[i], L"--width") == 0)
+        {
+            _width = ::wcstol(argv[++i], nullptr, 10);
+        }
+
+        if (::wcscmp(argv[i], L"-h") == 0 || ::wcscmp(argv[i], L"--height") == 0)
+        {
+            _height = ::wcstol(argv[++i], nullptr, 10);
+        }
+
+        if (::wcscmp(argv[i], L"-warp") == 0 || ::wcscmp(argv[i], L"--warp") == 0)
+        {
+            _useWarp = true;
+        }
+    }
+
+    // Free memory allocated by CommandLineToArgvW
+    ::LocalFree(argv);
+}
+
+void APPLICATION::DestroyWindow()
+{
+    delete _windowInst;
+    _windowInst = nullptr;
 }
 
 void APPLICATION::Update()
@@ -118,13 +156,9 @@ void APPLICATION::Render()
 
         _commandQueue->ExecuteCommandList(commandList);
 
-        UINT syncInterval = _windowInst->GetVSync() ? 1 : 0;
-        UINT presentFlags = _windowInst->GetTearingSupported() && !_windowInst->GetVSync() ? DXGI_PRESENT_ALLOW_TEARING : 0;
-        ThrowIfFailed(_windowInst->GetSwapChain()->Present(syncInterval, presentFlags));
+        currentBackBufferIndex = _windowInst->Present();
 
         _windowInst->GetCurrentFrameFenceValue() = _commandQueue->Signal();
-
-        currentBackBufferIndex = _windowInst->GetSwapChain()->GetCurrentBackBufferIndex();
 
         _commandQueue->WaitForFenceValue(_windowInst->GetCurrentFrameFenceValue());
     }

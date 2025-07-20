@@ -5,7 +5,9 @@
 
 int CALLBACK main(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine, int nCmdShow)
 {
-    APPLICATION* application = APPLICATION::CreateInstance(hInstance);
+    APPLICATION* application = APPLICATION::CreateInstance();
+    application->ParseCommandLineArguments();
+    application->CreateRenderWindow(L"DX12WindowClass", 1280, 720, false);
     application->Run();
     application->Quit();
 

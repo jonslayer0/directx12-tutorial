@@ -46,7 +46,7 @@ private:
 
 	void ResizeDepthBuffer(int width, int height);
 
-	uint64_t _FenceValues[g_numFrames] = {0};
+	uint64_t _fenceValues[g_numFrames] = {0};
 
 	ComPtr<ID3D12Resource> _vertexBuffer;
 	ComPtr<ID3D12Resource> _indexBuffer;
