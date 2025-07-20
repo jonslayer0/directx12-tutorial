@@ -2,7 +2,8 @@
 
 #include "Helpers.h"
 
-#include <vector>
+#include <unordered_map>
+using namespace std;
 
 class WINDOW;
 class COMMAND_QUEUE;
@@ -19,6 +20,7 @@ public:
 	COMMAND_QUEUE* GetCommandQueue(D3D12_COMMAND_LIST_TYPE commandListType);
 	inline ComPtr<ID3D12Device2> GetDevice() { return _device; }
 	inline ComPtr<ID3D12DescriptorHeap> GetDescriptorHeap() { return _rtvDescriptorHeap; }
+	inline UINT GetDescriptorHeapSize() const { return _rtvDescriptorSize; }
 
 	void Update();
 	void Render();
@@ -37,7 +39,7 @@ private:
 	// 
 	WINDOW*			_windowInst = nullptr;
 	COMMAND_QUEUE*	_commandQueue = nullptr; // TODO : fuse
-	vector<COMMAND_QUEUE*> _commandQueues;	 //
+	unordered_map<D3D12_COMMAND_LIST_TYPE, COMMAND_QUEUE*> _commandQueues;
 
 	// DirectX12 objects
 	ComPtr<ID3D12Device2>		 _device;

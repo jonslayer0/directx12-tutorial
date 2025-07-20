@@ -229,10 +229,13 @@ void TUTORIAL::ResizeDepthBuffer(int width, int height)
         optimizedClearValue.Format = DXGI_FORMAT_D32_FLOAT;
         optimizedClearValue.DepthStencil = { 1.0f, 0 };
 
+        CD3DX12_HEAP_PROPERTIES heapProp(D3D12_HEAP_TYPE_DEFAULT);
+        CD3DX12_RESOURCE_DESC resourceDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT, width, height, 1, 0, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+
         ThrowIfFailed(device->CreateCommittedResource(
-            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+            &heapProp,
             D3D12_HEAP_FLAG_NONE,
-            &CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT, width, height, 1, 0, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL),
+            &resourceDesc,
             D3D12_RESOURCE_STATE_DEPTH_WRITE,
             &optimizedClearValue,
             IID_PPV_ARGS(&_depthBuffer))
@@ -286,7 +289,40 @@ void TUTORIAL::OnUpdate(UpdateEventArgs& e)
 
 void TUTORIAL::OnRender(RenderEventArgs& e)
 {
+    ComPtr<ID3D12Device2> device = APPLICATION::Instance()->GetDevice();
+    COMMAND_QUEUE* commandQueue = APPLICATION::Instance()->GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+    auto commandList = commandQueue->GetCommandList();
+    
+    UINT currentBackBufferIndex = _window->GetCurrentBackBufferIndex();
+    auto backBuffer = _window->GetCurrentBackBuffer();
+    auto rtv = _window->GetCurrentRenderTargetView(APPLICATION::Instance()->GetDescriptorHeapSize(), APPLICATION::Instance()->GetDescriptorHeap());
+    auto dsv = _dsvHeap->GetCPUDescriptorHandleForHeapStart();
 
+    // Clear back and depth
+    {
+        TransitionResource(commandList, backBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        FLOAT clearColor[] = { 0.4f, 0.6f, 0.9f, 1.0f };
+        ClearRTV(commandList, rtv, clearColor);
+        ClearDepth(commandQueue->GetCommandList(), dsv);
+    }
+
+    commandList->SetPipelineState(_pipelineState.Get());
+    commandList->SetGraphicsRootSignature(_rootSignature.Get());
+
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    commandList->IASetVertexBuffers(0, 1, &_vertexBufferView);
+    commandList->IASetIndexBuffer(&_indexBufferView);
+
+    commandList->RSSetViewports(1, &_viewport);
+    commandList->RSSetScissorRects(1, &_scissorRect);
+
+    commandList->OMSetRenderTargets(1, &rtv, false, &dsv);
+
+    XMMATRIX mvpMatrix = XMMatrixMultiply(_modelMatrix, _viewMatrix);
+    mvpMatrix = XMMatrixMultiply(mvpMatrix, _projectionMatrix);
+    commandList->SetGraphicsRoot32BitConstants(0, sizeof(XMMATRIX) / 4, &mvpMatrix, 0);
+
+    commandList->DrawIndexedInstanced(_countof(g_Indices), 1, 0, 0, 0);
 }
 
 void TUTORIAL::OnKeyPressed(KeyEventArgs& e)

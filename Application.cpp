@@ -133,9 +133,9 @@ void APPLICATION::Render()
 void APPLICATION::Flush()
 {
     _commandQueue->Flush();
-    for (COMMAND_QUEUE* queue : _commandQueues)
+    for (auto queueIt : _commandQueues)
     {
-        queue->Flush();
+        queueIt.second->Flush();
     }
 }
 
@@ -264,6 +264,10 @@ ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, 
 
 COMMAND_QUEUE* APPLICATION::GetCommandQueue(D3D12_COMMAND_LIST_TYPE commandListType)
 {
-    _commandQueues.push_back(new COMMAND_QUEUE(_device, commandListType));
-    return (*_commandQueues.end());
+    auto it = _commandQueues.find(commandListType);
+    if (it == _commandQueues.end())
+    {
+        _commandQueues[commandListType] = new COMMAND_QUEUE(_device, commandListType);
+    }
+    return (it->second);
 }

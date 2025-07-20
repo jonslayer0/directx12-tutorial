@@ -29,6 +29,8 @@ public:
 	inline ComPtr<ID3D12Resource> GetCurrentBackBuffer() const { return _backBuffers[_currentBackBufferIndex]; }
 	inline ComPtr<IDXGISwapChain4> GetSwapChain() const { return _swapChain; }
 	inline uint64_t& GetCurrentFrameFenceValue() { return _frameFenceValues[_currentBackBufferIndex]; }
+	
+	D3D12_CPU_DESCRIPTOR_HANDLE GetCurrentRenderTargetView(UINT rtvDescriptorSize, ComPtr<ID3D12DescriptorHeap> descriptorHeap);
 
 	inline HWND GetWindowHandle() const { return _hWnd; }
 

@@ -16,11 +16,11 @@ public:
 	virtual void UnloadContent() override;
 
 protected:
-	virtual void OnUpdate(UpdateEventArgs& e) override { ; }
-	virtual void OnRender(RenderEventArgs& e) override { ; }
-	virtual void OnKeyPressed(KeyEventArgs& e) override { ; }
-	virtual void OnMouseWheel(MouseWheelEventArgs& e) override { ; }
-	virtual void OnResize(ResizeEventArgs& e) override { ; }
+	virtual void OnUpdate(UpdateEventArgs& e) override;
+	virtual void OnRender(RenderEventArgs& e) override;
+	virtual void OnKeyPressed(KeyEventArgs& e) override;
+	virtual void OnMouseWheel(MouseWheelEventArgs& e) override;
+	virtual void OnResize(ResizeEventArgs& e) override;
 
 private:
 	void TransitionResource(ComPtr<ID3D12GraphicsCommandList2> commandList,

@@ -211,6 +211,11 @@ void WINDOW::UpdateRenderTargetViews(ComPtr<ID3D12Device2> device, ComPtr<ID3D12
     }
 }
 
+D3D12_CPU_DESCRIPTOR_HANDLE WINDOW::GetCurrentRenderTargetView(UINT rtvDescriptorSize, ComPtr<ID3D12DescriptorHeap> descriptorHeap)
+{
+   return CD3DX12_CPU_DESCRIPTOR_HANDLE(descriptorHeap->GetCPUDescriptorHandleForHeapStart(), _currentBackBufferIndex, rtvDescriptorSize);
+}
+
 void EnableDebugLayer()
 {
 #if defined(_DEBUG)
