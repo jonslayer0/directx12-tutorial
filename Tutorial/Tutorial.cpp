@@ -12,6 +12,17 @@ struct VERTEX_POS_COLOR
     XMFLOAT3 Color;
 };
 
+struct PIPELINE_STREAM_STRUCTURE
+{
+    CD3DX12_PIPELINE_STATE_STREAM_ROOT_SIGNATURE rootSignature;
+    CD3DX12_PIPELINE_STATE_STREAM_INPUT_LAYOUT inputLayout;
+    CD3DX12_PIPELINE_STATE_STREAM_PRIMITIVE_TOPOLOGY primtiveTopologyType;
+    CD3DX12_PIPELINE_STATE_STREAM_VS vertexShader;
+    CD3DX12_PIPELINE_STATE_STREAM_PS pixelShader;
+    CD3DX12_PIPELINE_STATE_STREAM_DEPTH_STENCIL_FORMAT dsvFormat;
+    CD3DX12_PIPELINE_STATE_STREAM_RENDER_TARGET_FORMATS renderTargetFormats;
+};
+
 static VERTEX_POS_COLOR g_Vertices[8] = {
     { XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, 0.0f) }, // 0
     { XMFLOAT3(-1.0f,  1.0f, -1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) }, // 1
@@ -59,7 +70,7 @@ void TUTORIAL::ClearRTV(ComPtr<ID3D12GraphicsCommandList2> commandList,
 
 void TUTORIAL::ClearDepth(ComPtr<ID3D12GraphicsCommandList2> commandList,
     D3D12_CPU_DESCRIPTOR_HANDLE dsv,
-    FLOAT depth = 1.0f)
+    FLOAT depth)
 {
     commandList.Get()->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, depth, 0, 0, nullptr);
 }
@@ -70,17 +81,19 @@ void TUTORIAL::UpdateBufferResource(ComPtr<ID3D12GraphicsCommandList2> commandLi
     size_t numElements,
     size_t elementSize,
     const void* pBufferData,
-    D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE)
+    D3D12_RESOURCE_FLAGS flags)
 {
     ComPtr<ID3D12Device2> device = APPLICATION::Instance()->GetDevice();
     size_t bufferSize = numElements * elementSize;
 
     if (pBufferData)
     {
+        CD3DX12_HEAP_PROPERTIES heapProp(D3D12_HEAP_TYPE_DEFAULT);
+        CD3DX12_RESOURCE_DESC resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize, flags);
         ThrowIfFailed(device->CreateCommittedResource(
-            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+            &heapProp,
             D3D12_HEAP_FLAG_NONE,
-            &CD3DX12_RESOURCE_DESC::Buffer(bufferSize, flags),
+            &resourceDesc,
             D3D12_RESOURCE_STATE_COMMON,
             nullptr,
             IID_PPV_ARGS(pDestinationResource)));
@@ -100,20 +113,25 @@ bool TUTORIAL::LoadContent()
     COMMAND_QUEUE* commandQueue = APPLICATION::Instance()->GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COPY);
     ComPtr<ID3D12GraphicsCommandList2> commandList = commandQueue->GetCommandList();
 
+    // Upload vertex buffer
     ComPtr<ID3D12Resource> intermediateVertexBuffer;
     UpdateBufferResource(commandList.Get(), &_vertexBuffer, &intermediateVertexBuffer, _countof(g_Vertices), sizeof(VERTEX_POS_COLOR), g_Vertices);
 
+    // Create vertex buffer view
     _vertexBufferView.BufferLocation = _vertexBuffer->GetGPUVirtualAddress();
     _vertexBufferView.SizeInBytes = sizeof(g_Vertices);
     _vertexBufferView.StrideInBytes = sizeof(VERTEX_POS_COLOR);
 
+    // Upload index buffer
     ComPtr<ID3D12Resource> intermediateIndexBuffer;
     UpdateBufferResource(commandList.Get(), &_indexBuffer, &intermediateIndexBuffer, _countof(g_Indices), sizeof(WORD), g_Indices);
 
+    // Create index buffer view
     _indexBufferView.BufferLocation = _indexBuffer->GetGPUVirtualAddress();
     _indexBufferView.Format = DXGI_FORMAT_R16_UINT;
     _indexBufferView.SizeInBytes = sizeof(g_Indices);
 
+    // Create Descriptor Heap for depth RT
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
     dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
     dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
@@ -121,14 +139,17 @@ bool TUTORIAL::LoadContent()
     dsvHeapDesc.NumDescriptors = 1;
     device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&_dsvHeap));
 
+    // Load vertex and pixel shader from compiled binary
     ComPtr<ID3DBlob> vertexShaderBlob, pixelShaderBlob;
     ThrowIfFailed(D3DReadFileToBlob(L"VertexShader.cso", &vertexShaderBlob));
     ThrowIfFailed(D3DReadFileToBlob(L"PixelShader.cso", &pixelShaderBlob));
 
+    // Input layout for vertex shader
     D3D12_INPUT_ELEMENT_DESC inputLayout[] = {
         {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
         {"COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}};
 
+    // Check for root signature version
     D3D12_FEATURE_DATA_ROOT_SIGNATURE featureData = {};
     featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_2;
     if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &featureData, sizeof(featureData))))
@@ -140,6 +161,7 @@ bool TUTORIAL::LoadContent()
         featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
     }
 
+    // Create Root Signature from serialized root signature description
     D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags = 
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
         D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
@@ -148,7 +170,7 @@ bool TUTORIAL::LoadContent()
         D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
 
     CD3DX12_ROOT_PARAMETER1 rootParameters[1];
-    rootParameters[0].InitAsConstants(sizeof(XMMATRIX) / 4, 0, 0, D3D12_SHADER_VISIBILITY_VERTEX);
+    rootParameters[0].InitAsConstants(sizeof(XMMATRIX) / 4, 0, 0, D3D12_SHADER_VISIBILITY_VERTEX); // number of 32 bits elements ==> '16' floats (size of MMATRIX / 4)
 
     CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDescription;
     CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC::Init_1_2(rootSignatureDescription, _countof(rootParameters), rootParameters, 0, nullptr, rootSignatureFlags);
@@ -157,6 +179,8 @@ bool TUTORIAL::LoadContent()
     ComPtr<ID3DBlob> errorBlob;
     ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSignatureDescription, featureData.HighestVersion, &rootSignatureBlob, &errorBlob));
     ThrowIfFailed(device->CreateRootSignature(0, rootSignatureBlob->GetBufferPointer(), rootSignatureBlob->GetBufferSize(), IID_PPV_ARGS(&_rootSignature)));
+
+    return true;
 }
 
 void TUTORIAL::UnloadContent()

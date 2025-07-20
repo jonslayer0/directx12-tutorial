@@ -56,6 +56,9 @@
     <ClInclude Include="..\Tutorial\Tutorial.h">
       <Filter>Source Files\Tutorial</Filter>
     </ClInclude>
+    <ClInclude Include="..\Events.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="..\VertexShader.hlsl">

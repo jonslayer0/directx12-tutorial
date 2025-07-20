@@ -1,17 +1,13 @@
-#pragma once
-
 struct VERTEX_POS_COLOR
 {
     float3 position : POSITION;
     float3 color : COLOR;
 };
 
-struct MODEL_VIEW_PROJECTION
+cbuffer modelViewProjectionCB : register(b0)
 {
     matrix modelToProj;
 };
-
-ConstantBuffer<MODEL_VIEW_PROJECTION> modelViewProjectionCB : register(b0);
 
 struct VERTEX_SHADER_OUTPUT
 {
@@ -23,8 +19,8 @@ VERTEX_SHADER_OUTPUT main(VERTEX_POS_COLOR input)
 {
     VERTEX_SHADER_OUTPUT output;
     
-    output.position = mul(modelViewProjectionCB.modelToProj, float4(input.position, 1.0f));
-    output.color = input.color;
+    output.position = mul(modelToProj, float4(input.position, 1.0f));
+    output.color = float4(input.color, 1.0f);
     
     return output;
 }

@@ -1,5 +1,3 @@
-#pragma once
-
 struct PIXEL_SHADER_INPUT
 {
     float4 color : COLOR;

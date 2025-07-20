@@ -14,7 +14,7 @@ public:
 
 	inline WINDOW* GetWindow() { return _windowInst; }
 	inline COMMAND_QUEUE* GetCommandQueue() { return _commandQueue; }
-	inline COMMAND_QUEUE* GetCommandQueue(D3D12_COMMAND_LIST_TYPE commandListType);
+	COMMAND_QUEUE* GetCommandQueue(D3D12_COMMAND_LIST_TYPE commandListType);
 	inline ComPtr<ID3D12Device2> GetDevice() { return _device; }
 	inline ComPtr<ID3D12DescriptorHeap> GetDescriptorHeap() { return _rtvDescriptorHeap; }
 

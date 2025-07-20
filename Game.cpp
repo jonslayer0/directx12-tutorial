@@ -24,6 +24,8 @@ bool GAME::Initialize()
 	}
 
 	_window = APPLICATION::Instance()->GetWindow();
+
+	return true;
 }
 
 void GAME::Destroy()
