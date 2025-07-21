@@ -23,11 +23,8 @@ public:
 	inline COMMAND_QUEUE* GetCommandQueue() { return _commandQueue; }
 	COMMAND_QUEUE* GetCommandQueue(D3D12_COMMAND_LIST_TYPE commandListType);
 	inline ComPtr<ID3D12Device2> GetDevice() { return _device; }
-	inline ComPtr<ID3D12DescriptorHeap> GetDescriptorHeap() { return _rtvDescriptorHeap; }
-	inline UINT GetDescriptorHeapSize() const { return _rtvDescriptorSize; }
 
 	void Update();
-	void Render();
 	void Flush();
 
 	void Run();
@@ -48,8 +45,6 @@ private:
 
 	// DirectX12 objects
 	ComPtr<ID3D12Device2>		 _device;
-	ComPtr<ID3D12DescriptorHeap> _rtvDescriptorHeap;
-	UINT						 _rtvDescriptorSize = 0u;
 
 	//
 	wstring _Name;

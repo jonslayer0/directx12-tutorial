@@ -1,11 +1,13 @@
 #pragma once
 
 #include "Helpers.h"
+#include "Events.h"
+#include "HighResolutionClock.h"
 
 #include <string.h>
 using namespace std;
 
-class COMMAND_QUEUE;
+class GAME;
 
 class WINDOW
 {
@@ -13,12 +15,13 @@ public:
 	WINDOW(const wstring& name, int width, int height, bool vSync);
 	~WINDOW() { ; }
 
-	void CreateSwapChain(ComPtr<ID3D12CommandQueue> commandQueue);
+	void CreateSwapChain(ComPtr<ID3D12Device2> device, ComPtr<ID3D12CommandQueue> commandQueue);
 
-	void Resize();
 	void SwitchFullscreen();
-	void UpdateRenderTargetViews(ComPtr<ID3D12Device2> device, ComPtr<ID3D12DescriptorHeap> descriptorHeap);
 	UINT Present();
+	void Show();
+	void Hide();
+
 
 	inline void SetIsInitialized() { _isInitialized = true; }
 	inline void SwitchVSync() { _vSync = !_vSync; };
@@ -26,17 +29,42 @@ public:
 	inline bool GetTearingSupported() const { return _tearingSupported; };
 	inline bool isInitialized() const { return _isInitialized; }
 	inline bool GetIsWarp() const { return _useWarp; }
+	inline HWND GetWindowHandle() const { return _hWnd; }
 
 	inline UINT& GetCurrentBackBufferIndex() { return _currentBackBufferIndex; }
 	inline ComPtr<ID3D12Resource> GetCurrentBackBuffer() const { return _backBuffers[_currentBackBufferIndex]; }
 	inline ComPtr<IDXGISwapChain4> GetSwapChain() const { return _swapChain; }
 	inline uint64_t& GetCurrentFrameFenceValue() { return _frameFenceValues[_currentBackBufferIndex]; }
+
+	void UpdateRenderTargetViews();
 	
-	D3D12_CPU_DESCRIPTOR_HANDLE GetCurrentRenderTargetView(UINT rtvDescriptorSize, ComPtr<ID3D12DescriptorHeap> descriptorHeap);
+	D3D12_CPU_DESCRIPTOR_HANDLE GetCurrentRenderTargetView();
 
-	inline HWND GetWindowHandle() const { return _hWnd; }
+	inline void RegisterCallbacks(std::shared_ptr<GAME> pGame) { _pGame = pGame; };
 
-private:
+	// Update and Draw can only be called by the application.
+	virtual void OnUpdate(UpdateEventArgs& e);
+	virtual void OnRender(RenderEventArgs& e);
+
+	// A keyboard key was pressed
+	virtual void OnKeyPressed(KeyEventArgs& e);
+	// A keyboard key was released
+	virtual void OnKeyReleased(KeyEventArgs& e);
+
+	// The mouse was moved
+	virtual void OnMouseMoved(MouseMotionEventArgs& e);
+	// A button on the mouse was pressed
+	virtual void OnMouseButtonPressed(MouseButtonEventArgs& e);
+	// A button on the mouse was released
+	virtual void OnMouseButtonReleased(MouseButtonEventArgs& e);
+	// The mouse wheel was moved.
+	virtual void OnMouseWheel(MouseWheelEventArgs& e);
+
+	// The window was resized.
+	virtual void OnResize(ResizeEventArgs& e);
+
+protected:
+
 	// Window handle.
 	HWND _hWnd;
 	RECT _windowRect;
@@ -55,9 +83,18 @@ private:
 
 	// DirectX12 objects
 	ComPtr<IDXGISwapChain4>	_swapChain;
+	ComPtr<ID3D12DescriptorHeap> _rtvDescriptorHeap;
 	ComPtr<ID3D12Resource>	_backBuffers[g_numFrames];
+
+	UINT					_rtvDescriptorSize = 0u;
 	UINT					_currentBackBufferIndex = 0u;
 
 	// Synchronization objects
 	uint64_t	_frameFenceValues[g_numFrames] = {};
+
+	std::weak_ptr<GAME> _pGame;
+
+	uint64_t _FrameCounter;
+	HighResolutionClock _UpdateClock;
+	HighResolutionClock _RenderClock;
 };

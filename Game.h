@@ -25,12 +25,15 @@ public:
 	virtual void Destroy();
 
 protected :
+	friend class WINDOW;
+
 	virtual void OnUpdate(UpdateEventArgs& e) { ; }
 	virtual void OnRender(RenderEventArgs& e) { ; }
 	virtual void OnKeyPressed(KeyEventArgs& e) { ; }
 	virtual void OnKeyReleased(KeyEventArgs& e) { ; }
 	virtual void OnMouseMoved(MouseMotionEventArgs& e) { ; }
 	virtual void OnMouseButtonPressed(MouseButtonEventArgs& e) { ; }
+	virtual void OnMouseButtonReleased(MouseButtonEventArgs& e) { ; }
 	virtual void OnMouseWheel(MouseWheelEventArgs& e) { ; }
 	virtual void OnResize(ResizeEventArgs& e) { ; }
 	virtual void OnWindowDestroy() { ; }

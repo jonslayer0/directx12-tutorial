@@ -132,6 +132,7 @@
     <ClCompile Include="..\Application.cpp" />
     <ClCompile Include="..\CommandQueue.cpp" />
     <ClCompile Include="..\Game.cpp" />
+    <ClCompile Include="..\HighResolutionClock.cpp" />
     <ClCompile Include="..\main.cpp" />
     <ClCompile Include="..\Tutorial\Tutorial.cpp" />
     <ClCompile Include="..\Window.cpp" />
@@ -142,6 +143,7 @@
     <ClInclude Include="..\Events.h" />
     <ClInclude Include="..\Game.h" />
     <ClInclude Include="..\Helpers.h" />
+    <ClInclude Include="..\HighResolutionClock.h" />
     <ClInclude Include="..\Tutorial\Tutorial.h" />
     <ClInclude Include="..\Window.h" />
   </ItemGroup>

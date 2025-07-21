@@ -1,6 +1,11 @@
 #include "Window.h"
 #include "Application.h"
 #include "CommandQueue.h"
+#include "Game.h"
+
+#include <unordered_map>
+
+static unordered_map<HWND, WINDOW*> gs_Windows;
 
 // Windows initiliazing function headers
 void EnableDebugLayer();
@@ -8,6 +13,8 @@ bool CheckTearingSupport();
 LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 void RegisterWindowClass(HINSTANCE hInst, const wchar_t* windowClassName);
 HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst, const wchar_t* windowTitle, uint32_t width, uint32_t height);
+ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t numDescriptors);
+MouseButtonEventArgs::MouseButton DecodeMouseButton(UINT messageID);
 
 WINDOW::WINDOW(const wstring& name, int width, int height, bool vSync):
     _clientWidth(width),
@@ -34,7 +41,7 @@ WINDOW::WINDOW(const wstring& name, int width, int height, bool vSync):
     // Swap chain creation called by application
 }
 
-void WINDOW::CreateSwapChain(ComPtr<ID3D12CommandQueue> commandQueue)
+void WINDOW::CreateSwapChain(ComPtr<ID3D12Device2> device, ComPtr<ID3D12CommandQueue> commandQueue)
 {
     ComPtr<IDXGISwapChain4> dxgiSwapChain4;
     ComPtr<IDXGIFactory4> dxgiFactory4;
@@ -78,43 +85,9 @@ void WINDOW::CreateSwapChain(ComPtr<ID3D12CommandQueue> commandQueue)
 
     // Get first index of back buffer
     _currentBackBufferIndex = _swapChain->GetCurrentBackBufferIndex();
-}
 
-void WINDOW::Resize()
-{
-    RECT clientRect = {};
-    ::GetClientRect(_hWnd, &clientRect);
-
-    int width = clientRect.right - clientRect.left;
-    int height = clientRect.bottom - clientRect.top;
-
-    if (_clientWidth != width || _clientHeight != height)
-    {
-        // Don't allow 0 size swap chain back buffers.
-        _clientWidth = std::max(1, width);
-        _clientHeight = std::max(1, height);
-
-        // Flush the GPU queue to make sure the swap chain's back buffers
-        // are not being referenced by an in-flight command list.
-        APPLICATION::Instance()->Flush();
-
-        for (int i = 0; i < g_numFrames; ++i)
-        {
-            // Any references to the back buffers must be released
-            // before the swap chain can be resized.
-            _backBuffers[i].Reset();
-            _frameFenceValues[i] = _frameFenceValues[_currentBackBufferIndex];
-        }
-
-        DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
-        ThrowIfFailed(_swapChain->GetDesc(&swapChainDesc));
-        ThrowIfFailed(_swapChain->ResizeBuffers(g_numFrames, _clientWidth, _clientHeight,
-            swapChainDesc.BufferDesc.Format, swapChainDesc.Flags));
-
-        _currentBackBufferIndex = _swapChain->GetCurrentBackBufferIndex();
-
-        UpdateRenderTargetViews(APPLICATION::Instance()->GetDevice(), APPLICATION::Instance()->GetDescriptorHeap());
-    }
+    _rtvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, g_numFrames);
+    _rtvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 }
 
 void WINDOW::SwitchFullscreen()
@@ -165,11 +138,13 @@ void WINDOW::SwitchFullscreen()
     }
 }
 
-void WINDOW::UpdateRenderTargetViews(ComPtr<ID3D12Device2> device, ComPtr<ID3D12DescriptorHeap> descriptorHeap)
+void WINDOW::UpdateRenderTargetViews()
 {
-    auto rtvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    auto device = APPLICATION::Instance()->GetDevice();
 
-    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(descriptorHeap->GetCPUDescriptorHandleForHeapStart());
+    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
+    auto rtvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
     for (int i = 0; i < g_numFrames; ++i)
     {
@@ -193,9 +168,116 @@ UINT WINDOW::Present()
     return _swapChain->GetCurrentBackBufferIndex();
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE WINDOW::GetCurrentRenderTargetView(UINT rtvDescriptorSize, ComPtr<ID3D12DescriptorHeap> descriptorHeap)
+D3D12_CPU_DESCRIPTOR_HANDLE WINDOW::GetCurrentRenderTargetView()
 {
-   return CD3DX12_CPU_DESCRIPTOR_HANDLE(descriptorHeap->GetCPUDescriptorHandleForHeapStart(), _currentBackBufferIndex, rtvDescriptorSize);
+   return CD3DX12_CPU_DESCRIPTOR_HANDLE(_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), _currentBackBufferIndex, _rtvDescriptorSize);
+}
+
+void WINDOW::OnUpdate(UpdateEventArgs&)
+{
+    _UpdateClock.Tick();
+
+    if (auto pGame = _pGame.lock())
+    {
+        _FrameCounter++;
+
+        UpdateEventArgs updateEventArgs(_UpdateClock.GetDeltaSeconds(), _UpdateClock.GetTotalSeconds());
+        pGame->OnUpdate(updateEventArgs);
+    }
+}
+
+void WINDOW::OnRender(RenderEventArgs&)
+{
+    _RenderClock.Tick();
+
+    if (auto pGame = _pGame.lock())
+    {
+        RenderEventArgs renderEventArgs(_RenderClock.GetDeltaSeconds(), _RenderClock.GetTotalSeconds());
+        pGame->OnRender(renderEventArgs);
+    }
+}
+
+void WINDOW::OnKeyPressed(KeyEventArgs& e)
+{
+    if (auto pGame = _pGame.lock())
+    {
+        pGame->OnKeyPressed(e);
+    }
+}
+
+void WINDOW::OnKeyReleased(KeyEventArgs& e)
+{
+    if (auto pGame = _pGame.lock())
+    {
+        pGame->OnKeyReleased(e);
+    }
+}
+
+// The mouse was moved
+void WINDOW::OnMouseMoved(MouseMotionEventArgs& e)
+{
+    if (auto pGame = _pGame.lock())
+    {
+        pGame->OnMouseMoved(e);
+    }
+}
+
+// A button on the mouse was pressed
+void WINDOW::OnMouseButtonPressed(MouseButtonEventArgs& e)
+{
+    if (auto pGame = _pGame.lock())
+    {
+        pGame->OnMouseButtonPressed(e);
+    }
+}
+
+// A button on the mouse was released
+void WINDOW::OnMouseButtonReleased(MouseButtonEventArgs& e)
+{
+    if (auto pGame = _pGame.lock())
+    {
+        pGame->OnMouseButtonReleased(e);
+    }
+}
+
+// The mouse wheel was moved.
+void WINDOW::OnMouseWheel(MouseWheelEventArgs& e)
+{
+    if (auto pGame = _pGame.lock())
+    {
+        pGame->OnMouseWheel(e);
+    }
+}
+
+void WINDOW::OnResize(ResizeEventArgs& e)
+{
+    // Update the client size.
+    if (_clientWidth != e.Width || _clientHeight != e.Height)
+    {
+        _clientWidth = std::max(1, e.Width);
+        _clientHeight = std::max(1, e.Height);
+
+        APPLICATION::Instance()->Flush();
+
+        for (int i = 0; i < g_numFrames; ++i)
+        {
+            _backBuffers[i].Reset();
+        }
+
+        DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
+        ThrowIfFailed(_swapChain->GetDesc(&swapChainDesc));
+        ThrowIfFailed(_swapChain->ResizeBuffers(g_numFrames, _clientWidth,
+            _clientHeight, swapChainDesc.BufferDesc.Format, swapChainDesc.Flags));
+
+        _currentBackBufferIndex = _swapChain->GetCurrentBackBufferIndex();
+
+        UpdateRenderTargetViews();
+    }
+
+    if (auto pGame = _pGame.lock())
+    {
+        pGame->OnResize(e);
+    }
 }
 
 void EnableDebugLayer()
@@ -235,44 +317,153 @@ bool CheckTearingSupport()
     return allowTearing == TRUE;
 }
 
+ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t numDescriptors)
+{
+    ComPtr<ID3D12DescriptorHeap> descriptorHeap;
+
+    D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+    desc.NumDescriptors = numDescriptors;
+    desc.Type = type;
+
+    ThrowIfFailed(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&descriptorHeap)));
+
+    return descriptorHeap;
+}
+
+//LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+//{
+//    APPLICATION* application = APPLICATION::Instance();
+//
+//    if (application && application->GetWindow() && application->GetWindow()->isInitialized())
+//    {
+//        WINDOW* window = application->GetWindow();
+//
+//        switch (message)
+//        {
+//        case WM_PAINT:
+//            application->Update();
+//            application->Render();
+//            break;
+//        case WM_SYSKEYDOWN:
+//        case WM_KEYDOWN:
+//        {
+//            bool alt = (::GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+//
+//            switch (wParam)
+//            {
+//            case 'V':
+//                window->SwitchVSync();
+//                break;
+//            case VK_ESCAPE:
+//                ::PostQuitMessage(0);
+//                break;
+//            case VK_RETURN:
+//                if (alt)
+//                {
+//            case VK_F11:
+//                window->SwitchFullscreen();
+//                }
+//                break;
+//            case VK_F4:
+//                if (alt) ::PostQuitMessage(0);
+//                break;
+//            }
+//        }
+//        break;
+//        // The default window procedure will play a system notification sound 
+//        // when pressing the Alt+Enter keyboard combination if this message is 
+//        // not handled.
+//        case WM_SYSCHAR:
+//            break;
+//        case WM_SIZE:
+//            window->Resize();
+//            break;
+//        case WM_DESTROY:
+//            ::PostQuitMessage(0);
+//            break;
+//        default:
+//            return ::DefWindowProcW(hwnd, message, wParam, lParam);
+//        }
+//    }
+//    else
+//    {
+//        return ::DefWindowProcW(hwnd, message, wParam, lParam);
+//    }
+//
+//    return 0;
+//}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-    APPLICATION* application = APPLICATION::Instance();
-
-    if (application && application->GetWindow() && application->GetWindow()->isInitialized())
+    WINDOW* pWindow;
     {
-        WINDOW* window = application->GetWindow();
+        auto iter = gs_Windows.find(hwnd);
+        if (iter != gs_Windows.end())
+        {
+            pWindow = iter->second;
+        }
+    }
 
+    if (pWindow)
+    {
         switch (message)
         {
         case WM_PAINT:
-            application->Update();
-            application->Render();
-            break;
+        {
+            // Delta time will be filled in by the Window.
+            UpdateEventArgs updateEventArgs(0.0f, 0.0f);
+            pWindow->OnUpdate(updateEventArgs);
+            RenderEventArgs renderEventArgs(0.0f, 0.0f);
+            // Delta time will be filled in by the Window.
+            pWindow->OnRender(renderEventArgs);
+        }
+        break;
         case WM_SYSKEYDOWN:
         case WM_KEYDOWN:
         {
-            bool alt = (::GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-
-            switch (wParam)
+            MSG charMsg;
+            // Get the Unicode character (UTF-16)
+            unsigned int c = 0;
+            // For printable characters, the next message will be WM_CHAR.
+            // This message contains the character code we need to send the KeyPressed event.
+            // Inspired by the SDL 1.2 implementation.
+            if (PeekMessage(&charMsg, hwnd, 0, 0, PM_NOREMOVE) && charMsg.message == WM_CHAR)
             {
-            case 'V':
-                window->SwitchVSync();
-                break;
-            case VK_ESCAPE:
-                ::PostQuitMessage(0);
-                break;
-            case VK_RETURN:
-                if (alt)
-                {
-            case VK_F11:
-                window->SwitchFullscreen();
-                }
-                break;
-            case VK_F4:
-                if (alt) ::PostQuitMessage(0);
-                break;
+                GetMessage(&charMsg, hwnd, 0, 0);
+                c = static_cast<unsigned int>(charMsg.wParam);
             }
+            bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            bool control = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+            bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+            KeyCode::Key key = (KeyCode::Key)wParam;
+            unsigned int scanCode = (lParam & 0x00FF0000) >> 16;
+            KeyEventArgs keyEventArgs(key, c, KeyEventArgs::Pressed, shift, control, alt);
+            pWindow->OnKeyPressed(keyEventArgs);
+        }
+        break;
+        case WM_SYSKEYUP:
+        case WM_KEYUP:
+        {
+            bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            bool control = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+            bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+            KeyCode::Key key = (KeyCode::Key)wParam;
+            unsigned int c = 0;
+            unsigned int scanCode = (lParam & 0x00FF0000) >> 16;
+
+            // Determine which key was released by converting the key code and the scan code
+            // to a printable character (if possible).
+            // Inspired by the SDL 1.2 implementation.
+            unsigned char keyboardState[256];
+            GetKeyboardState(keyboardState);
+            wchar_t translatedCharacters[4];
+            if (int result = ToUnicodeEx(static_cast<UINT>(wParam), scanCode, keyboardState, translatedCharacters, 4, 0, NULL) > 0)
+            {
+                c = translatedCharacters[0];
+            }
+
+            KeyEventArgs keyEventArgs(key, c, KeyEventArgs::Released, shift, control, alt);
+            pWindow->OnKeyReleased(keyEventArgs);
         }
         break;
         // The default window procedure will play a system notification sound 
@@ -280,19 +471,111 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         // not handled.
         case WM_SYSCHAR:
             break;
+        case WM_MOUSEMOVE:
+        {
+            bool lButton = (wParam & MK_LBUTTON) != 0;
+            bool rButton = (wParam & MK_RBUTTON) != 0;
+            bool mButton = (wParam & MK_MBUTTON) != 0;
+            bool shift = (wParam & MK_SHIFT) != 0;
+            bool control = (wParam & MK_CONTROL) != 0;
+
+            int x = ((int)(short)LOWORD(lParam));
+            int y = ((int)(short)HIWORD(lParam));
+
+            MouseMotionEventArgs mouseMotionEventArgs(lButton, mButton, rButton, control, shift, x, y);
+            pWindow->OnMouseMoved(mouseMotionEventArgs);
+        }
+        break;
+        case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+        case WM_MBUTTONDOWN:
+        {
+            bool lButton = (wParam & MK_LBUTTON) != 0;
+            bool rButton = (wParam & MK_RBUTTON) != 0;
+            bool mButton = (wParam & MK_MBUTTON) != 0;
+            bool shift = (wParam & MK_SHIFT) != 0;
+            bool control = (wParam & MK_CONTROL) != 0;
+
+            int x = ((int)(short)LOWORD(lParam));
+            int y = ((int)(short)HIWORD(lParam));
+
+            MouseButtonEventArgs mouseButtonEventArgs(DecodeMouseButton(message), MouseButtonEventArgs::Pressed, lButton, mButton, rButton, control, shift, x, y);
+            pWindow->OnMouseButtonPressed(mouseButtonEventArgs);
+        }
+        break;
+        case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONUP:
+        {
+            bool lButton = (wParam & MK_LBUTTON) != 0;
+            bool rButton = (wParam & MK_RBUTTON) != 0;
+            bool mButton = (wParam & MK_MBUTTON) != 0;
+            bool shift = (wParam & MK_SHIFT) != 0;
+            bool control = (wParam & MK_CONTROL) != 0;
+
+            int x = ((int)(short)LOWORD(lParam));
+            int y = ((int)(short)HIWORD(lParam));
+
+            MouseButtonEventArgs mouseButtonEventArgs(DecodeMouseButton(message), MouseButtonEventArgs::Released, lButton, mButton, rButton, control, shift, x, y);
+            pWindow->OnMouseButtonReleased(mouseButtonEventArgs);
+        }
+        break;
+        case WM_MOUSEWHEEL:
+        {
+            // The distance the mouse wheel is rotated.
+            // A positive value indicates the wheel was rotated to the right.
+            // A negative value indicates the wheel was rotated to the left.
+            float zDelta = ((int)(short)HIWORD(wParam)) / (float)WHEEL_DELTA;
+            short keyStates = (short)LOWORD(wParam);
+
+            bool lButton = (keyStates & MK_LBUTTON) != 0;
+            bool rButton = (keyStates & MK_RBUTTON) != 0;
+            bool mButton = (keyStates & MK_MBUTTON) != 0;
+            bool shift = (keyStates & MK_SHIFT) != 0;
+            bool control = (keyStates & MK_CONTROL) != 0;
+
+            int x = ((int)(short)LOWORD(lParam));
+            int y = ((int)(short)HIWORD(lParam));
+
+            // Convert the screen coordinates to client coordinates.
+            POINT clientToScreenPoint;
+            clientToScreenPoint.x = x;
+            clientToScreenPoint.y = y;
+            ScreenToClient(hwnd, &clientToScreenPoint);
+
+            MouseWheelEventArgs mouseWheelEventArgs(zDelta, lButton, mButton, rButton, control, shift, (int)clientToScreenPoint.x, (int)clientToScreenPoint.y);
+            pWindow->OnMouseWheel(mouseWheelEventArgs);
+        }
+        break;
         case WM_SIZE:
-            window->Resize();
-            break;
+        {
+            int width = ((int)(short)LOWORD(lParam));
+            int height = ((int)(short)HIWORD(lParam));
+
+            ResizeEventArgs resizeEventArgs(width, height);
+            pWindow->OnResize(resizeEventArgs);
+        }
+        break;
         case WM_DESTROY:
-            ::PostQuitMessage(0);
-            break;
+        {
+            // If a window is being destroyed, remove it from the 
+            // window maps.
+            RemoveWindow(hwnd);
+
+            if (gs_Windows.empty())
+            {
+                // If there are no more windows, quit the application.
+                PostQuitMessage(0);
+            }
+        }
+        break;
         default:
-            return ::DefWindowProcW(hwnd, message, wParam, lParam);
+            return DefWindowProcW(hwnd, message, wParam, lParam);
         }
     }
     else
     {
-        return ::DefWindowProcW(hwnd, message, wParam, lParam);
+        return DefWindowProcW(hwnd, message, wParam, lParam);
     }
 
     return 0;
@@ -352,4 +635,37 @@ HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst,
 
     assert(hWnd && "Failed to create window");
     return hWnd;
+}
+
+
+// Convert the message ID into a MouseButton ID
+MouseButtonEventArgs::MouseButton DecodeMouseButton(UINT messageID)
+{
+    MouseButtonEventArgs::MouseButton mouseButton = MouseButtonEventArgs::None;
+    switch (messageID)
+    {
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONUP:
+    case WM_LBUTTONDBLCLK:
+    {
+        mouseButton = MouseButtonEventArgs::Left;
+    }
+    break;
+    case WM_RBUTTONDOWN:
+    case WM_RBUTTONUP:
+    case WM_RBUTTONDBLCLK:
+    {
+        mouseButton = MouseButtonEventArgs::Right;
+    }
+    break;
+    case WM_MBUTTONDOWN:
+    case WM_MBUTTONUP:
+    case WM_MBUTTONDBLCLK:
+    {
+        mouseButton = MouseButtonEventArgs::Middel;
+    }
+    break;
+    }
+
+    return mouseButton;
 }

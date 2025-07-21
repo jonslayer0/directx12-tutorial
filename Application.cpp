@@ -12,8 +12,6 @@ APPLICATION* APPLICATION::g_application = nullptr;
 // DirectX12 initiliazing function headers
 ComPtr<ID3D12Device2> CreateDevice(ComPtr<IDXGIAdapter4> adapter);
 ComPtr<IDXGIAdapter4> GetAdapter(bool useWarp);
-ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t numDescriptors);
-
 APPLICATION::APPLICATION()
 {
 }
@@ -57,13 +55,8 @@ void APPLICATION::CreateRenderWindow(const wstring& name, int width, int height,
 
     _commandQueue = new COMMAND_QUEUE(_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-    _windowInst->CreateSwapChain(_commandQueue->GetCommandQueue());
-
-    _rtvDescriptorHeap = CreateDescriptorHeap(_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, g_numFrames);
-    _rtvDescriptorSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-    _windowInst->UpdateRenderTargetViews(_device, _rtvDescriptorHeap);
-
+    _windowInst->CreateSwapChain(_device, _commandQueue->GetCommandQueue());
+    _windowInst->UpdateRenderTargetViews();
     _windowInst->SetIsInitialized();
 }
 
@@ -122,45 +115,6 @@ void APPLICATION::Update()
 
         frameCounter = 0;
         elapsedSeconds = 0.0;
-    }
-}
-
-void APPLICATION::Render()
-{
-    UINT& currentBackBufferIndex = _windowInst->GetCurrentBackBufferIndex();
-    auto backBuffer = _windowInst->GetCurrentBackBuffer();
-
-    ComPtr<ID3D12GraphicsCommandList2> commandList = _commandQueue->GetCommandList();
-
-    // Clear the render target.
-    {
-        CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(
-            backBuffer.Get(),
-            D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
-
-        commandList.Get()->ResourceBarrier(1, &barrier);
-
-        FLOAT clearColor[] = { 0.4f, 0.6f, 0.9f, 1.0f };
-        CD3DX12_CPU_DESCRIPTOR_HANDLE rtv(_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
-            currentBackBufferIndex, _rtvDescriptorSize);
-
-        commandList.Get()->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
-    }
-
-    // Present
-    {
-        CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(
-            backBuffer.Get(),
-            D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
-        commandList.Get()->ResourceBarrier(1, &barrier);
-
-        _commandQueue->ExecuteCommandList(commandList);
-
-        currentBackBufferIndex = _windowInst->Present();
-
-        _windowInst->GetCurrentFrameFenceValue() = _commandQueue->Signal();
-
-        _commandQueue->WaitForFenceValue(_windowInst->GetCurrentFrameFenceValue());
     }
 }
 
@@ -281,19 +235,6 @@ ComPtr<IDXGIAdapter4> GetAdapter(bool useWarp)
     }
 
     return dxgiAdapterFinal;
-}
-
-ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t numDescriptors)
-{
-    ComPtr<ID3D12DescriptorHeap> descriptorHeap;
-
-    D3D12_DESCRIPTOR_HEAP_DESC desc = {};
-    desc.NumDescriptors = numDescriptors;
-    desc.Type = type;
-
-    ThrowIfFailed(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&descriptorHeap)));
-
-    return descriptorHeap;
 }
 
 COMMAND_QUEUE* APPLICATION::GetCommandQueue(D3D12_COMMAND_LIST_TYPE commandListType)

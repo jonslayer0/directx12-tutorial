@@ -6,6 +6,13 @@
 
 using namespace DirectX;
 
+// Clamp a value between a min and max range.
+template<typename T>
+constexpr const T& clamp(const T& val, const T& min, const T& max)
+{
+    return val < min ? min : val > max ? max : val;
+}
+
 struct VERTEX_POS_COLOR
 {
     XMFLOAT3 Position;
@@ -211,7 +218,7 @@ bool TUTORIAL::LoadContent()
 
 void TUTORIAL::UnloadContent()
 {
-
+    _contentLoaded = false;
 }
 
 void TUTORIAL::ResizeDepthBuffer(int width, int height)
@@ -258,7 +265,7 @@ void TUTORIAL::OnUpdate(UpdateEventArgs& e)
     
     super::OnUpdate(e);
 
-    totalTime = e.elapseTime;
+    totalTime = e.ElapsedTime;
     frameCount++;
 
     // Display FPS after every second
@@ -274,7 +281,7 @@ void TUTORIAL::OnUpdate(UpdateEventArgs& e)
         totalTime = 0.0;
     }
 
-    float angle = static_cast<float>(e.totalTime * 90.0);
+    float angle = static_cast<float>(e.TotalTime * 90.0);
     const XMVECTOR rotationAxis = XMVectorSet(0, 1, 1, 0);
     _modelMatrix = XMMatrixRotationAxis(rotationAxis, XMConvertToRadians(angle));
 
@@ -295,7 +302,7 @@ void TUTORIAL::OnRender(RenderEventArgs& e)
     
     UINT currentBackBufferIndex = _window->GetCurrentBackBufferIndex();
     auto backBuffer = _window->GetCurrentBackBuffer();
-    auto rtv = _window->GetCurrentRenderTargetView(APPLICATION::Instance()->GetDescriptorHeapSize(), APPLICATION::Instance()->GetDescriptorHeap());
+    auto rtv = _window->GetCurrentRenderTargetView();
     auto dsv = _dsvHeap->GetCPUDescriptorHandleForHeapStart();
 
     // Clear back and depth
@@ -334,22 +341,44 @@ void TUTORIAL::OnRender(RenderEventArgs& e)
 
 void TUTORIAL::OnKeyPressed(KeyEventArgs& e)
 {
+    super::OnKeyPressed(e);
 
+    switch (e.Key)
+    {
+    case KeyCode::Escape:
+        APPLICATION::Instance()->Quit();
+        break;
+    case KeyCode::Enter:
+        if (e.Alt)
+        {
+    case KeyCode::F11:
+        _window->SwitchFullscreen();
+        break;
+        }
+    case KeyCode::V:
+        _window->SwitchVSync();
+        break;
+    }
 }
 
 void TUTORIAL::OnMouseWheel(MouseWheelEventArgs& e)
 {
+    _fov -= e.WheelDelta;
+    _fov = clamp(_fov, 12.0f, 90.0f);
 
+    char buffer[256];
+    sprintf_s(buffer, "FoV: %f\n", _fov);
+    OutputDebugStringA(buffer);
 }
 
 void TUTORIAL::OnResize(ResizeEventArgs& e)
 {
-    if (e.width != GetClientWidth() || e.height != GetClientHeight())
+    if (e.Width != GetClientWidth() || e.Height != GetClientHeight())
     {
         super::OnResize(e);
 
-        _viewport = CD3DX12_VIEWPORT(0.0f, 0.0f, static_cast<float>(e.width), static_cast<float>(e.height));
+        _viewport = CD3DX12_VIEWPORT(0.0f, 0.0f, static_cast<float>(e.Width), static_cast<float>(e.Height));
 
-        ResizeDepthBuffer(e.width, e.height);
+        ResizeDepthBuffer(e.Width, e.Height);
     }
 }
