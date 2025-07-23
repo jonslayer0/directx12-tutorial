@@ -5,7 +5,7 @@
 
 #include <unordered_map>
 
-static unordered_map<HWND, WINDOW*> gs_Windows;
+unordered_map<HWND, WINDOW*> WINDOW::gs_Windows;
 
 // Windows initiliazing function headers
 void EnableDebugLayer();
@@ -16,7 +16,7 @@ HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst, const wchar_t
 ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t numDescriptors);
 MouseButtonEventArgs::MouseButton DecodeMouseButton(UINT messageID);
 
-WINDOW::WINDOW(const wstring& name, int width, int height, bool vSync):
+WINDOW::WINDOW(HINSTANCE hInstance, const wstring& name, int width, int height, bool vSync):
     _clientWidth(width),
     _clientHeight(height),
     _vSync(vSync)
@@ -31,14 +31,11 @@ WINDOW::WINDOW(const wstring& name, int width, int height, bool vSync):
 
     _tearingSupported = CheckTearingSupport();
 
-    HINSTANCE hInstance = NULL;
     RegisterWindowClass(hInstance, name.data());
     _hWnd = CreateWindow(name.data(), hInstance, L"Learning DirectX 12", _clientWidth, _clientHeight);
 
     // Initialize the global window rect variable.
     ::GetWindowRect(_hWnd, &_windowRect);
-
-    // Swap chain creation called by application
 }
 
 void WINDOW::CreateSwapChain(ComPtr<ID3D12Device2> device, ComPtr<ID3D12CommandQueue> commandQueue)
@@ -395,13 +392,11 @@ ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, 
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-    WINDOW* pWindow;
+    WINDOW* pWindow = nullptr;
+    auto iter = WINDOW::gs_Windows.find(hwnd);
+    if (iter != WINDOW::gs_Windows.end())
     {
-        auto iter = gs_Windows.find(hwnd);
-        if (iter != gs_Windows.end())
-        {
-            pWindow = iter->second;
-        }
+        pWindow = iter->second;
     }
 
     if (pWindow)
@@ -455,15 +450,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
             // to a printable character (if possible).
             // Inspired by the SDL 1.2 implementation.
             unsigned char keyboardState[256];
-            GetKeyboardState(keyboardState);
-            wchar_t translatedCharacters[4];
-            if (int result = ToUnicodeEx(static_cast<UINT>(wParam), scanCode, keyboardState, translatedCharacters, 4, 0, NULL) > 0)
+            bool bRet = GetKeyboardState(keyboardState);
+            if(bRet)
             {
-                c = translatedCharacters[0];
-            }
+                wchar_t translatedCharacters[4];
+                if (int result = ToUnicodeEx(static_cast<UINT>(wParam), scanCode, keyboardState, translatedCharacters, 4, 0, NULL) > 0)
+                {
+                    c = translatedCharacters[0];
+                }
 
-            KeyEventArgs keyEventArgs(key, c, KeyEventArgs::Released, shift, control, alt);
-            pWindow->OnKeyReleased(keyEventArgs);
+                KeyEventArgs keyEventArgs(key, c, KeyEventArgs::Released, shift, control, alt);
+                pWindow->OnKeyReleased(keyEventArgs);
+            }
         }
         break;
         // The default window procedure will play a system notification sound 
@@ -538,9 +536,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
             int y = ((int)(short)HIWORD(lParam));
 
             // Convert the screen coordinates to client coordinates.
-            POINT clientToScreenPoint;
-            clientToScreenPoint.x = x;
-            clientToScreenPoint.y = y;
+            POINT clientToScreenPoint = {x,y};
             ScreenToClient(hwnd, &clientToScreenPoint);
 
             MouseWheelEventArgs mouseWheelEventArgs(zDelta, lButton, mButton, rButton, control, shift, (int)clientToScreenPoint.x, (int)clientToScreenPoint.y);
@@ -558,11 +554,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
         case WM_DESTROY:
         {
-            // If a window is being destroyed, remove it from the 
-            // window maps.
-            RemoveWindow(hwnd);
+            // If a window is being destroyed, remove it from the window maps.
+            //RemoveWindow(hwnd);
+            WINDOW::gs_Windows.erase(iter);
+            delete iter->second;
 
-            if (gs_Windows.empty())
+            if (WINDOW::gs_Windows.empty())
             {
                 // If there are no more windows, quit the application.
                 PostQuitMessage(0);

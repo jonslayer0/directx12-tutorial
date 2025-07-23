@@ -7,19 +7,19 @@ using namespace std;
 
 class WINDOW;
 class COMMAND_QUEUE;
+class GAME;
 
 class APPLICATION
 {
 public:
-	static APPLICATION* CreateInstance();
+	static APPLICATION* CreateInstance(HINSTANCE hInstance);
 	static void			DeleteInstance();
 	static APPLICATION* Instance();
 
-	void CreateRenderWindow(const wstring& name, int width, int height, bool vSync);
+	WINDOW* CreateRenderWindow(const wstring& name, int width, int height, bool vSync);
 	void ParseCommandLineArguments();
-	void DestroyWindow();
 
-	inline WINDOW* GetWindow() { return _windowInst; }
+	//inline WINDOW* GetWindow() { return _windowInst; }
 	inline COMMAND_QUEUE* GetCommandQueue() { return _commandQueue; }
 	COMMAND_QUEUE* GetCommandQueue(D3D12_COMMAND_LIST_TYPE commandListType);
 	inline ComPtr<ID3D12Device2> GetDevice() { return _device; }
@@ -27,9 +27,8 @@ public:
 	void Update();
 	void Flush();
 
-	void Run();
+	int Run(std::shared_ptr<GAME> pGame);
 	void Quit();
-
 
 private:
 	APPLICATION();
@@ -39,7 +38,6 @@ private:
 	static APPLICATION* g_application;
 
 	// 
-	WINDOW*			_windowInst = nullptr;
 	COMMAND_QUEUE*	_commandQueue = nullptr; // TODO : fuse
 	unordered_map<D3D12_COMMAND_LIST_TYPE, COMMAND_QUEUE*> _commandQueues;
 
@@ -52,4 +50,7 @@ private:
 	int _height = 1;
 	bool _vSync = false;
 	bool _useWarp = false;
+
+	// The application instance handle that this application was created with.
+	HINSTANCE _hInstance;
 };

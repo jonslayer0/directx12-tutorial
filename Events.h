@@ -263,6 +263,8 @@ public:
         , Shift(shift)
         , X(x)
         , Y(y)
+        , RelX(0)
+        , RelY(0)
     {
     }
 

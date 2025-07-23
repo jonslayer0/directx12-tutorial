@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <memory>
 
 // Windows Runtime Library. Needed for Microsoft::WRL::ComPtr<> template class.
 #include <wrl.h>

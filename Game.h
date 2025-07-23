@@ -10,7 +10,7 @@ using namespace std;
 
 class WINDOW;
 
-class GAME
+class GAME : public std::enable_shared_from_this<GAME>
 {
 public:
 	GAME(const wstring& name, int width, int height, bool vSync);

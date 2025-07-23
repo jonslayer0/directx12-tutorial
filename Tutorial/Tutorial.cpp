@@ -93,17 +93,27 @@ void TUTORIAL::UpdateBufferResource(ComPtr<ID3D12GraphicsCommandList2> commandLi
     ComPtr<ID3D12Device2> device = APPLICATION::Instance()->GetDevice();
     size_t bufferSize = numElements * elementSize;
 
+    CD3DX12_HEAP_PROPERTIES heapProp(D3D12_HEAP_TYPE_DEFAULT);
+    CD3DX12_RESOURCE_DESC resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize, flags);
+    ThrowIfFailed(device->CreateCommittedResource(
+        &heapProp,
+        D3D12_HEAP_FLAG_NONE,
+        &resourceDesc,
+        D3D12_RESOURCE_STATE_COMMON,
+        nullptr,
+        IID_PPV_ARGS(pDestinationResource)));
+
     if (pBufferData)
     {
-        CD3DX12_HEAP_PROPERTIES heapProp(D3D12_HEAP_TYPE_DEFAULT);
+        CD3DX12_HEAP_PROPERTIES heapProp(D3D12_HEAP_TYPE_UPLOAD);
         CD3DX12_RESOURCE_DESC resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize, flags);
         ThrowIfFailed(device->CreateCommittedResource(
             &heapProp,
             D3D12_HEAP_FLAG_NONE,
             &resourceDesc,
-            D3D12_RESOURCE_STATE_COMMON,
+            D3D12_RESOURCE_STATE_GENERIC_READ,
             nullptr,
-            IID_PPV_ARGS(pDestinationResource)));
+            IID_PPV_ARGS(pIntermediateResource)));
 
         D3D12_SUBRESOURCE_DATA subresourceData = {};
         subresourceData.pData = pBufferData;
@@ -296,6 +306,8 @@ void TUTORIAL::OnUpdate(UpdateEventArgs& e)
 
 void TUTORIAL::OnRender(RenderEventArgs& e)
 {
+    super::OnRender(e);
+
     ComPtr<ID3D12Device2> device = APPLICATION::Instance()->GetDevice();
     COMMAND_QUEUE* commandQueue = APPLICATION::Instance()->GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
     auto commandList = commandQueue->GetCommandList();

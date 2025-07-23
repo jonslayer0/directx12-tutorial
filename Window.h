@@ -5,6 +5,7 @@
 #include "HighResolutionClock.h"
 
 #include <string.h>
+#include <unordered_map>
 using namespace std;
 
 class GAME;
@@ -12,15 +13,15 @@ class GAME;
 class WINDOW
 {
 public:
-	WINDOW(const wstring& name, int width, int height, bool vSync);
+	WINDOW(HINSTANCE hInstance, const wstring& name, int width, int height, bool vSync);
 	~WINDOW() { ; }
 
 	void CreateSwapChain(ComPtr<ID3D12Device2> device, ComPtr<ID3D12CommandQueue> commandQueue);
 
 	void SwitchFullscreen();
 	UINT Present();
-	void Show();
-	void Hide();
+	void Show() { ::ShowWindow(_hWnd, SW_SHOW); }
+	void Hide() { ::ShowWindow(_hWnd, SW_HIDE); }
 
 
 	inline void SetIsInitialized() { _isInitialized = true; }
@@ -63,6 +64,9 @@ public:
 	// The window was resized.
 	virtual void OnResize(ResizeEventArgs& e);
 
+	static unordered_map<HWND, WINDOW*> gs_Windows;
+
+
 protected:
 
 	// Window handle.
@@ -94,7 +98,7 @@ protected:
 
 	std::weak_ptr<GAME> _pGame;
 
-	uint64_t _FrameCounter;
+	uint64_t _FrameCounter = 0;
 	HighResolutionClock _UpdateClock;
 	HighResolutionClock _RenderClock;
 };

@@ -1,6 +1,7 @@
 #include "Application.h"
 #include "Window.h"
 #include "CommandQueue.h"
+#include "Game.h"
 
 // STL Headers
 #include <algorithm>
@@ -19,14 +20,14 @@ APPLICATION::APPLICATION()
 APPLICATION::~APPLICATION()
 {
     delete _commandQueue;
-    delete _windowInst;
 }
 
-APPLICATION* APPLICATION::CreateInstance() 
+APPLICATION* APPLICATION::CreateInstance(HINSTANCE hInstance)
 { 
 	if (g_application == nullptr) 
 	{
 		g_application = new APPLICATION();
+        g_application->_hInstance = hInstance;
 	}
 	return g_application; 
 }
@@ -43,21 +44,25 @@ APPLICATION* APPLICATION::Instance()
 }
 
 
-void APPLICATION::CreateRenderWindow(const wstring& name, int width, int height, bool vSync)
+WINDOW* APPLICATION::CreateRenderWindow(const wstring& name, int width, int height, bool vSync)
 {
     // Create Window
-    _windowInst = new WINDOW(name, width, height, vSync);
-
+    WINDOW* newWindow = new WINDOW(_hInstance, name, width, height, vSync);
+    
     // Get GPU Adapter
-    ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(_windowInst->GetIsWarp());
+    ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(newWindow->GetIsWarp());
 
     _device = CreateDevice(dxgiAdapter4);
 
     _commandQueue = new COMMAND_QUEUE(_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-    _windowInst->CreateSwapChain(_device, _commandQueue->GetCommandQueue());
-    _windowInst->UpdateRenderTargetViews();
-    _windowInst->SetIsInitialized();
+    newWindow->CreateSwapChain(_device, _commandQueue->GetCommandQueue());
+    newWindow->UpdateRenderTargetViews();
+    newWindow->SetIsInitialized();
+
+    WINDOW::gs_Windows.emplace(std::pair<HWND, WINDOW*>(newWindow->GetWindowHandle(), newWindow));
+
+    return newWindow;
 }
 
 void APPLICATION::ParseCommandLineArguments()
@@ -85,12 +90,6 @@ void APPLICATION::ParseCommandLineArguments()
 
     // Free memory allocated by CommandLineToArgvW
     ::LocalFree(argv);
-}
-
-void APPLICATION::DestroyWindow()
-{
-    delete _windowInst;
-    _windowInst = nullptr;
 }
 
 void APPLICATION::Update()
@@ -127,19 +126,28 @@ void APPLICATION::Flush()
     }
 }
 
-void APPLICATION::Run()
+int APPLICATION::Run(std::shared_ptr<GAME> pGame)
 {
-    ::ShowWindow(_windowInst->GetWindowHandle(), SW_SHOW);
+    if (!pGame->Initialize()) return 1;
+    if (!pGame->LoadContent()) return 2;
 
-    MSG msg = {};
+    MSG msg = { 0 };
     while (msg.message != WM_QUIT)
     {
-        if (::PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+        if (PeekMessage(&msg, 0, 0, 0, PM_REMOVE))
         {
-            ::TranslateMessage(&msg);
-            ::DispatchMessage(&msg);
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
         }
     }
+
+    // Flush any commands in the commands queues before quiting.
+    Flush();
+
+    pGame->UnloadContent();
+    pGame->Destroy();
+
+    return static_cast<int>(msg.wParam);
 }
 
 void APPLICATION::Quit()
@@ -243,6 +251,7 @@ COMMAND_QUEUE* APPLICATION::GetCommandQueue(D3D12_COMMAND_LIST_TYPE commandListT
     if (it == _commandQueues.end())
     {
         _commandQueues[commandListType] = new COMMAND_QUEUE(_device, commandListType);
+        return _commandQueues[commandListType];
     }
     return (it->second);
 }

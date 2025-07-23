@@ -1,5 +1,6 @@
 #include "Game.h"
 #include "Application.h"
+#include "Window.h"
 
 GAME::GAME(const wstring& name, int width, int height, bool vSync):
 	_name(name),
@@ -23,13 +24,15 @@ bool GAME::Initialize()
 		return false;
 	}
 
-	_window = APPLICATION::Instance()->GetWindow();
+	_window = APPLICATION::Instance()->CreateRenderWindow(L"DX12WindowClass", 1280, 720, false); 
+	_window->RegisterCallbacks(shared_from_this());
+	_window->Show();
 
 	return true;
 }
 
 void GAME::Destroy()
 {
-	APPLICATION::Instance()->DestroyWindow();
+	//APPLICATION::Instance()->DestroyWindow();
 	_window = nullptr;
 }
